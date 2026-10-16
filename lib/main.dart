@@ -6,9 +6,15 @@ import 'username_screen.dart';
 
 void main() => runApp(const SafeHerApp());
 
-class SafeHerApp extends StatelessWidget {
+class SafeHerApp extends StatefulWidget {
   const SafeHerApp({super.key, this.social});
   final SocialController? social;
+  @override
+  State<SafeHerApp> createState() => _SafeHerAppState();
+}
+
+class _SafeHerAppState extends State<SafeHerApp> {
+  ThemeMode themeMode = ThemeMode.system;
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'SafeHer',
@@ -23,12 +29,33 @@ class SafeHerApp extends StatelessWidget {
       ),
       cardTheme: const CardThemeData(elevation: 0, color: Colors.white),
     ),
-    home: SafeHerShell(social: social),
+    darkTheme: ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xFF6552A3),
+        brightness: Brightness.dark,
+      ),
+      appBarTheme: const AppBarTheme(centerTitle: false),
+      cardTheme: const CardThemeData(elevation: 0),
+    ),
+    themeMode: themeMode,
+    home: SafeHerShell(
+      social: widget.social,
+      themeMode: themeMode,
+      onThemeChanged: (mode) => setState(() => themeMode = mode),
+    ),
   );
 }
 
 class SafeHerShell extends StatefulWidget {
-  const SafeHerShell({super.key, this.social});
+  const SafeHerShell({
+    super.key,
+    this.social,
+    this.themeMode = ThemeMode.system,
+    this.onThemeChanged,
+  });
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode>? onThemeChanged;
   final SocialController? social;
   @override
   State<SafeHerShell> createState() => _SafeHerShellState();
@@ -46,6 +73,87 @@ class _SafeHerShellState extends State<SafeHerShell> {
     super.initState();
     social = widget.social ?? SocialController(newAccount: true);
     emergency.addListener(_syncEmergency);
+  }
+
+  void _openProfile() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (routeContext) => ListenableBuilder(
+          listenable: Listenable.merge([social, emergency]),
+          builder: (context, _) => Scaffold(
+            appBar: AppBar(title: const Text('Profile')),
+            body: Column(
+              children: [
+                _routeSosBanner(context),
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 650),
+                      child: ListView(
+                        padding: const EdgeInsets.all(24),
+                        children: [
+                          CircleAvatar(
+                            radius: 36,
+                            child: Text(
+                              social.currentUser.name.substring(0, 1),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            social.currentUser.name,
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.headlineSmall,
+                          ),
+                          const SizedBox(height: 20),
+                          Card(
+                            child: Column(
+                              children: [
+                                ListTile(
+                                  leading: const Icon(Icons.alternate_email),
+                                  title: const Text('Username'),
+                                  subtitle: Text(
+                                    '@${social.currentUser.username}',
+                                  ),
+                                ),
+                                const ListTile(
+                                  leading: Icon(Icons.email_outlined),
+                                  title: Text('Google email'),
+                                  subtitle: Text(
+                                    'Google account not connected',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          FilledButton.tonalIcon(
+                            onPressed: emergency.status != EmergencyStatus.idle
+                                ? null
+                                : () {
+                                    Navigator.of(routeContext).pop();
+                                    setState(() {
+                                      onboarded = false;
+                                      page = 0;
+                                    });
+                                  },
+                            icon: const Icon(Icons.logout),
+                            label: const Text('Log out'),
+                          ),
+                          if (emergency.status != EmergencyStatus.idle)
+                            const Text(
+                              'Finish or cancel the SOS before logging out.',
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _startSos() {
@@ -92,7 +200,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
         return const SizedBox.shrink();
       }
       return Material(
-        color: const Color(0xFFFCE4EA),
+        color: Theme.of(context).colorScheme.errorContainer,
         child: Padding(
           padding: const EdgeInsets.all(8),
           child: Wrap(
@@ -155,8 +263,8 @@ class _SafeHerShellState extends State<SafeHerShell> {
           ),
           actions: [
             IconButton(
-              tooltip: 'Account settings',
-              onPressed: () => setState(() => page = 3),
+              tooltip: 'Profile',
+              onPressed: _openProfile,
               icon: CircleAvatar(
                 radius: 17,
                 child: Text(social.currentUser.name.substring(0, 1)),
@@ -171,7 +279,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
                 sosOwner == social.currentUserId &&
                 page != 0)
               Material(
-                color: const Color(0xFFFCE4EA),
+                color: Theme.of(context).colorScheme.errorContainer,
                 child: Padding(
                   padding: const EdgeInsets.all(8),
                   child: Wrap(
@@ -201,7 +309,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
                   e.status == LocalSosStatus.active,
             ))
               Material(
-                color: const Color(0xFFFCE4EA),
+                color: Theme.of(context).colorScheme.errorContainer,
                 child: ListTile(
                   leading: const Icon(Icons.sos, color: Colors.red),
                   title: Text('SOS from ${social.person(event.senderId).name}'),
@@ -327,9 +435,12 @@ class _SafeHerShellState extends State<SafeHerShell> {
         style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
       ),
       const SizedBox(height: 8),
-      const Text(
+      Text(
         'Your trusted circle. One simple action.',
-        style: TextStyle(fontSize: 16, color: Colors.black54),
+        style: TextStyle(
+          fontSize: 16,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
       const SizedBox(height: 24),
       _panel(
@@ -351,6 +462,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
                   : null,
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFFC73550),
+                foregroundColor: Colors.white,
                 disabledBackgroundColor: const Color(0xFFC73550),
                 disabledForegroundColor: Colors.white,
                 shape: const CircleBorder(),
@@ -447,30 +559,24 @@ class _SafeHerShellState extends State<SafeHerShell> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Account',
+              'Appearance',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
-            DropdownButton<String>(
-              key: const ValueKey('profile-switch'),
-              value: social.currentUserId,
-              items: [
-                for (final person in social.profiles)
-                  DropdownMenuItem(value: person.id, child: Text(person.name)),
+            const SizedBox(height: 12),
+            SegmentedButton<ThemeMode>(
+              segments: const [
+                ButtonSegment(value: ThemeMode.system, label: Text('System')),
+                ButtonSegment(value: ThemeMode.light, label: Text('Light')),
+                ButtonSegment(value: ThemeMode.dark, label: Text('Dark')),
               ],
-              onChanged: emergency.status == EmergencyStatus.countdown
-                  ? null
-                  : (id) {
-                      if (id != null) social.switchProfile(id);
-                    },
+              selected: {widget.themeMode},
+              onSelectionChanged: (values) =>
+                  widget.onThemeChanged?.call(values.first),
             ),
-            Text(
-              '@${social.currentUser.username}',
-              style: const TextStyle(color: Colors.black54),
+            const SizedBox(height: 12),
+            const Text(
+              'System follows your device appearance, including its automatic schedule.',
             ),
-            if (emergency.status == EmergencyStatus.countdown)
-              const Text(
-                'Finish or cancel the countdown before switching accounts.',
-              ),
           ],
         ),
       ),
@@ -543,7 +649,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: const Color(0xFF6552A3)),
+          Icon(icon, color: Theme.of(context).colorScheme.primary),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -559,7 +665,10 @@ class _SafeHerShellState extends State<SafeHerShell> {
                 const SizedBox(height: 6),
                 Text(
                   detail,
-                  style: const TextStyle(height: 1.45, color: Colors.black54),
+                  style: TextStyle(
+                    height: 1.45,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),

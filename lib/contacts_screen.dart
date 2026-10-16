@@ -313,9 +313,11 @@ class _ContactsScreenState extends State<ContactsScreen> {
               ],
             ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'Manage SOS access through your approved favorite contacts.',
-            style: TextStyle(color: Colors.black54),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       );

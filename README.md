@@ -6,16 +6,11 @@ Android women safety and emergency coordination FYP. Requirements: `SafeHer_FYP_
 
 Material 3 onboarding, home, friends/chat, activity and settings. The local preview now supports sending/accepting/declining/cancelling friend requests, two-way messages between demo profiles, audio/video call preview screens, and favorite SOS contacts selected by a deliberate 1.5-second hold (or accessible options menu). SOS requires recipient approval and goes only to approved favorites. Requests, messages, preferences and activity remain in memory; there is no real network delivery, authentication, live media or tracking yet. The user has deferred Firebase integration.
 
-### Try the complete local flow
+### Try the current interface
 
-1. Choose **Get started**. In Contacts search `ayesha` while previewing as Hammad, then **Send request**.
-2. Open **Settings > Account** and switch to Ayesha. Open Contacts and **Accept** Hammad's request.
-3. Switch back to Hammad. Tap Ayesha to open chat, type a message, and use the audio/video icons to inspect the call previews. Switch profiles from Settings > Account to reply as the other person.
-4. On Hammad's Contacts screen, hold Ayesha for **1.5 seconds** or open her three-dot menu. Choose **Add to favorite SOS contact**.
-5. Switch to Ayesha and **Approve SOS** in Contacts. This separate approval preserves the PDF's mutual-consent requirement.
-6. Switch to Hammad and start SOS. After the countdown, switch to Ayesha to see the incoming local SOS banner; Sara receives nothing. Switch back to Hammad to cancel/resolve it. Activity shows timestamp, status and selected recipients.
+Choose **Get started**, select a unique username, and open Contacts to search `ayesha` or `sara` and send a local friend request. The avatar opens Profile; Settings opens appearance and SOS preferences. System appearance follows device brightness; Light/Dark override it for this session.
 
-Removing a favorite, revoking approval or removing a friend immediately removes recipient access. SOS status/cancellation remains visible on other tabs and inside chats/call previews. A declined/revoked favorite shows **approval needed** with an option to request approval again. Countdown profile switching is disabled to preserve sender identity.
+The account-switching dropdown has been removed for the product interface. Two-sided acceptance, chat, consent and recipient routing are covered by controller/widget tests until real authentication and separate devices are connected. Holding an accepted friend for **1.5 seconds** opens favorite SOS options. A separate recipient approval is required before SOS can start. Removing favorites or revoking consent removes recipient access; SOS cancellation remains available inside chat and profile.
 
 ## Run
 
@@ -75,8 +70,10 @@ Friends/chat follow-up: `flutter analyze` clean; all **24 tests passed**; `flutt
 
 ## Product presentation
 
+The header avatar opens Profile (saved username, Google email connection status, and local logout). Settings contains appearance and SOS preferences. Appearance defaults to System and follows OS brightness, with explicit Light/Dark overrides. Logout returns to onboarding and is unavailable during an SOS; Google sign-out will be wired with authentication. Theme selection is session-only. The old local account-switch dropdown has been removed from the product UI; controller tests still exercise multiple account flows.
+
 First entry now asks for a unique username before Home. Usernames are normalized to lowercase, use 3–20 letters/digits/underscores, and are checked again when saved. Friends search finds the saved username; existing configured accounts skip setup. The 26-test suite covers duplicate rejection, normalization, invalid names, setup and search-to-request behavior.
 
 This is still session-only: Google sign-in and global username reservation are not connected, and refresh resets local accounts. Firebase integration must atomically reserve `usernames/{normalizedUsername}` for the authenticated UID together with the user profile. Security rules/server validation must prevent overwrites and impersonation; a client-side availability check alone is insufficient.
 
-The UI uses normal SafeHer branding without Demo or Preview labels. The account selector is in Settings, not in a testing bar on every screen. The backend remains disconnected: calls show Unable to connect, SOS delivery is marked not delivered, and message status states that no connection exists. This presentation change does not add networking or persistent storage.
+The UI uses normal SafeHer branding without Demo or Preview labels. Profile is separate from Settings; the local account-switching selector is no longer shown. The backend remains disconnected: calls show Unable to connect, SOS delivery is marked not delivered, and message status states that no connection exists. This presentation change does not add networking or persistent storage.
