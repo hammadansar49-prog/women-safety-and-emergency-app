@@ -5,6 +5,7 @@ import 'contacts_screen.dart';
 import 'username_screen.dart';
 import 'local_store.dart';
 import 'profile_photo.dart';
+import 'sos_shortcut.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -106,6 +107,7 @@ class SafeHerShell extends StatefulWidget {
 
 class _SafeHerShellState extends State<SafeHerShell> {
   final emergency = EmergencyController();
+  late final SosShortcut shortcut;
   late final SocialController social;
   String? sosOwner;
   String? activeEventId;
@@ -115,6 +117,17 @@ class _SafeHerShellState extends State<SafeHerShell> {
   void initState() {
     super.initState();
     social = widget.social ?? SocialController(newAccount: true);
+    shortcut = SosShortcut(
+      selectedKey: social.shortcutKey,
+      onSos: () {
+        if (mounted &&
+            onboarded &&
+            social.signedIn &&
+            emergency.status == EmergencyStatus.idle) {
+          _startSos();
+        }
+      },
+    );
     onboarded = social.signedIn;
     emergency.countdownSeconds = social.countdown;
     for (final event in social.visibleEvents) {
@@ -198,6 +211,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
                                 : () async {
                                     try {
                                       await social.flush();
+                                      shortcut.enable(false);
                                       social.setSignedIn(false);
                                       await social.flush();
                                     } catch (_) {
@@ -315,6 +329,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
 
   @override
   void dispose() {
+    shortcut.dispose();
     emergency.dispose();
     if (widget.social == null) social.dispose();
     super.dispose();
@@ -695,11 +710,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
       'Media is optional',
       'You control camera and microphone access. Calls are currently unavailable.',
     ),
-    _panel(
-      Icons.touch_app_outlined,
-      'Device shortcuts',
-      'Hardware shortcuts are unavailable on this device. Use the SOS button on Home.',
-    ),
+    ShortcutSettings(shortcut: shortcut, onSelect: social.setShortcutKey),
     _panel(
       Icons.privacy_tip_outlined,
       'Privacy first',

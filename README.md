@@ -80,8 +80,14 @@ The UI uses normal SafeHer branding without Demo or Preview labels. Profile is s
 
 ## Local data and profile photos
 
-Tap the profile photo circle to open Upload photo. Once a photo exists, the same circle offers Change photo and Remove photo. Upload/Change opens the device gallery/file picker. Valid images up to 10 MB and 40 megapixels are decoded to a 384px PNG thumbnail and saved as image bytes, not a temporary picker path. Android lost-picker data is recovered at startup. Android and web are the current targets; no physical-phone verification has been performed.
+Tap the animated profile photo circle to open a centered Upload photo dialog. Once a photo exists, the same circle offers Change photo and Remove photo. Upload/Change opens the device gallery/file picker. Valid images up to 10 MB and 40 megapixels are decoded to a 384px PNG thumbnail and saved as image bytes, not a temporary picker path. Android lost-picker data is recovered at startup. Android and web are the current targets; no physical-phone verification has been performed.
 
 Every social-state change queues an ordered database write. Saving errors show a Retry action; logout waits for writes. Startup loads the database before rendering the account and refuses to silently overwrite unreadable data. Logout preserves the account and returns to onboarding; this is not authenticated sign-in yet. Active local SOS records recover their stop controls after restart; a countdown interrupted before activation is not resumed.
 
 Data is local, not a cloud backup or end-to-end encrypted service. Clearing app/site data, uninstalling, private browsing expiry, or browser storage eviction can remove it. Another device/browser/origin has separate storage. Production integration requires Firebase Auth UID-scoped Firestore data and Cloud Storage photos, with authorization rules and sync.
+
+## Configurable SOS button shortcut
+
+Settings saves Volume Up or Volume Down as the preferred double-press key. In the native Android app, Test shortcut listens for two short releases within 600ms without sending SOS. A successful test allows Enable shortcut; changing the key or restarting requires another test. The selected key replaces normal volume adjustment only while enabled/test mode in the visible, unlocked app. It starts the configured SOS countdown and still requires approved favorite contacts. Logout disables it.
+
+Power combinations, lock-screen/background activation and automatic background permission grants are not implemented. Browser settings allow preference selection only and explicitly state Android is required for testing/enabling. Native hardware reliability requires physical-device verification; a foreground test is not evidence of background support.

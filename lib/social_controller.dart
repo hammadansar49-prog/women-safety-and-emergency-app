@@ -95,6 +95,9 @@ class SocialController extends ChangeNotifier {
     c.signedIn = m['signedIn'];
     c.appearance = m['appearance'] ?? 'system';
     c.countdown = m['countdown'] ?? 5;
+    c.shortcutKey = m['shortcutKey'] == 'volumeDown'
+        ? 'volumeDown'
+        : 'volumeUp';
     c._photos.addAll(Map<String, String>.from(m['photos']));
     c._friendships.addAll(List<String>.from(m['friends']));
     c._favorites.addAll(List<String>.from(m['favorites']));
@@ -137,6 +140,7 @@ class SocialController extends ChangeNotifier {
     'signedIn': signedIn,
     'appearance': appearance,
     'countdown': countdown,
+    'shortcutKey': shortcutKey,
     'photos': _photos,
     'profiles': [
       for (final p in profiles)
@@ -180,6 +184,13 @@ class SocialController extends ChangeNotifier {
   bool signedIn = false;
   String appearance = 'system';
   int countdown = 5;
+  String shortcutKey = 'volumeUp';
+  void setShortcutKey(String value) {
+    if (!['volumeUp', 'volumeDown'].contains(value)) return;
+    shortcutKey = value;
+    notifyListeners();
+  }
+
   final Map<String, String> _photos = {};
   String? photoFor(String id) => _photos[id];
   void setPhoto(String? value) {

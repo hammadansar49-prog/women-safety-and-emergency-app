@@ -64,6 +64,7 @@ class ProfilePhotoEditor extends StatefulWidget {
 
 class _ProfilePhotoEditorState extends State<ProfilePhotoEditor> {
   bool busy = false;
+  bool pressed = false;
   String? error;
   Future<void> choose() async {
     final owner = widget.social.currentUserId;
@@ -96,26 +97,36 @@ class _ProfilePhotoEditorState extends State<ProfilePhotoEditor> {
   Future<void> showOptions() async {
     final owner = widget.social.currentUserId;
     final hasPhoto = widget.social.photoFor(owner) != null;
-    final action = await showModalBottomSheet<String>(
+    final action = await showDialog<String>(
       context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: Text(hasPhoto ? 'Change photo' : 'Upload photo'),
-              onTap: () => Navigator.pop(context, 'upload'),
-            ),
-            if (hasPhoto)
+      builder: (context) => AlertDialog(
+        title: const Text('Profile photo'),
+        contentPadding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
+        content: SizedBox(
+          width: 300,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               ListTile(
-                leading: const Icon(Icons.delete_outline),
-                title: const Text('Remove photo'),
-                onTap: () => Navigator.pop(context, 'remove'),
+                leading: const Icon(Icons.photo_library_outlined),
+                title: Text(hasPhoto ? 'Change photo' : 'Upload photo'),
+                onTap: () => Navigator.pop(context, 'upload'),
               ),
-          ],
+              if (hasPhoto)
+                ListTile(
+                  leading: const Icon(Icons.delete_outline),
+                  title: const Text('Remove photo'),
+                  onTap: () => Navigator.pop(context, 'remove'),
+                ),
+            ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
       ),
     );
     if (!mounted || owner != widget.social.currentUserId) return;
@@ -132,23 +143,31 @@ class _ProfilePhotoEditorState extends State<ProfilePhotoEditor> {
       Semantics(
         button: true,
         label: 'Profile photo options',
-        child: InkWell(
-          key: const ValueKey('profile-photo-button'),
-          onTap: busy ? null : showOptions,
-          customBorder: const CircleBorder(),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              profileAvatar(widget.social, 44),
-              if (busy)
-                const SizedBox(
-                  width: 88,
-                  height: 88,
-                  child: CircularProgressIndicator(
-                    semanticsLabel: 'Saving photo',
+        child: AnimatedScale(
+          scale: pressed ? 0.90 : 1,
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 140),
+          curve: Curves.easeOutCubic,
+          child: InkWell(
+            key: const ValueKey('profile-photo-button'),
+            onHighlightChanged: (value) => setState(() => pressed = value),
+            onTap: busy ? null : showOptions,
+            customBorder: const CircleBorder(),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                profileAvatar(widget.social, 44),
+                if (busy)
+                  const SizedBox(
+                    width: 88,
+                    height: 88,
+                    child: CircularProgressIndicator(
+                      semanticsLabel: 'Saving photo',
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
