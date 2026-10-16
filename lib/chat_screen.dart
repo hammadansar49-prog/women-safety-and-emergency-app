@@ -65,7 +65,7 @@ class _ChatScreenState extends State<ChatScreen> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
-        builder: (_) => _CallPreview(
+        builder: (_) => _CallScreen(
           name: widget.social.person(widget.friendId).name,
           video: video,
           safetyBannerBuilder: widget.safetyBannerBuilder,
@@ -122,7 +122,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     padding: const EdgeInsets.all(12),
                     color: colors.secondaryContainer,
                     child: const Text(
-                      'Local preview • messages stay in this session',
+                      'Not connected · messages stay on this device',
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -250,8 +250,8 @@ class _ChatScreenState extends State<ChatScreen> {
   );
 }
 
-class _CallPreview extends StatelessWidget {
-  const _CallPreview({
+class _CallScreen extends StatelessWidget {
+  const _CallScreen({
     required this.name,
     required this.video,
     this.safetyBannerBuilder,
@@ -262,9 +262,7 @@ class _CallPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Text(video ? 'Video call preview' : 'Audio call preview'),
-    ),
+    appBar: AppBar(title: Text(video ? 'Video call' : 'Audio call')),
     body: SafeArea(
       child: Column(
         children: [
@@ -293,20 +291,20 @@ class _CallPreview extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'Call preview — no live connection',
+                        'Unable to connect',
                         style: Theme.of(context).textTheme.titleLarge,
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 16),
                       const Text(
-                        'Live calls will be connected in the Firebase/WebRTC phase. Camera and microphone are not active.',
+                        'Calling is unavailable. Camera and microphone are off.',
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 32),
                       FilledButton.icon(
                         onPressed: () => Navigator.of(context).pop(),
                         icon: const Icon(Icons.call_end),
-                        label: const Text('End call preview'),
+                        label: const Text('Back to chat'),
                       ),
                     ],
                   ),

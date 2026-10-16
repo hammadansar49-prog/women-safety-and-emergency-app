@@ -17,17 +17,20 @@ SocialController readyCircle() {
 }
 
 void main() {
-  testWidgets('onboarding clearly labels demo and opens home', (tester) async {
+  testWidgets('onboarding opens the product interface without demo branding', (
+    tester,
+  ) async {
     await tester.pumpWidget(const SafeHerApp());
-    expect(find.text('Explore demo'), findsOneWidget);
-    await tester.ensureVisible(find.text('Explore demo'));
+    expect(find.text('Get started'), findsOneWidget);
+    await tester.ensureVisible(find.text('Get started'));
     await tester.pump();
-    await tester.tap(find.text('Explore demo'));
+    await tester.tap(find.text('Get started'));
     await tester.pumpAndSettle();
-    expect(find.text('Demo mode'), findsOneWidget);
+    expect(find.text('SafeHer'), findsOneWidget);
+    expect(find.text('Demo mode'), findsNothing);
     await tester.tap(find.byIcon(Icons.settings_outlined));
     await tester.pumpAndSettle();
-    expect(find.text('Firebase not connected'), findsOneWidget);
+    expect(find.text('Connection unavailable'), findsOneWidget);
   });
 
   testWidgets(
@@ -36,25 +39,25 @@ void main() {
       final social = readyCircle();
       addTearDown(social.dispose);
       await tester.pumpWidget(SafeHerApp(social: social));
-      await tester.ensureVisible(find.text('Explore demo'));
+      await tester.ensureVisible(find.text('Get started'));
       await tester.pump();
-      await tester.tap(find.text('Explore demo'));
+      await tester.tap(find.text('Get started'));
       await tester.pumpAndSettle();
       await tester.tap(find.byIcon(Icons.settings_outlined));
       await tester.pumpAndSettle();
       await tester.tap(find.text('3 sec'));
       await tester.tap(find.byIcon(Icons.shield_outlined));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('START DEMO'));
+      await tester.ensureVisible(find.text('START SOS'));
       await tester.pump();
-      await tester.tap(find.text('START DEMO'));
+      await tester.tap(find.text('START SOS'));
       await tester.pump();
-      expect(find.text('Demo starts in 3 seconds'), findsOneWidget);
+      expect(find.text('SOS starts in 3 seconds'), findsOneWidget);
       await tester.pump(const Duration(seconds: 3));
-      expect(find.text('DEMO ACTIVE'), findsOneWidget);
-      await tester.ensureVisible(find.text('Resolve demo'));
+      expect(find.text('SOS ACTIVE'), findsOneWidget);
+      await tester.ensureVisible(find.text('I am safe'));
       await tester.pump();
-      await tester.tap(find.text('Resolve demo'));
+      await tester.tap(find.text('I am safe'));
       await tester.pumpAndSettle();
       await tester.tap(find.byIcon(Icons.history));
       await tester.pumpAndSettle();
@@ -68,22 +71,22 @@ void main() {
     final social = readyCircle();
     addTearDown(social.dispose);
     await tester.pumpWidget(SafeHerApp(social: social));
-    await tester.ensureVisible(find.text('Explore demo'));
+    await tester.ensureVisible(find.text('Get started'));
     await tester.pump();
-    await tester.tap(find.text('Explore demo'));
+    await tester.tap(find.text('Get started'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('START DEMO'));
+    await tester.ensureVisible(find.text('START SOS'));
     await tester.pump();
-    await tester.tap(find.text('START DEMO'));
+    await tester.tap(find.text('START SOS'));
     await tester.pump();
     await tester.ensureVisible(find.text('Cancel countdown'));
     await tester.pump();
     await tester.tap(find.text('Cancel countdown'));
     await tester.pump(const Duration(seconds: 6));
-    expect(find.text('DEMO ACTIVE'), findsNothing);
+    expect(find.text('SOS ACTIVE'), findsNothing);
     await tester.drag(find.byType(ListView).first, const Offset(0, 400));
     await tester.pumpAndSettle();
-    expect(find.text('START DEMO'), findsOneWidget);
+    expect(find.text('START SOS'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.history));
     await tester.pumpAndSettle();
     expect(social.visibleEvents, isEmpty);
@@ -98,22 +101,22 @@ void main() {
     final social = readyCircle();
     addTearDown(social.dispose);
     await tester.pumpWidget(SafeHerApp(social: social));
-    await tester.tap(find.text('Explore demo'));
+    await tester.tap(find.text('Get started'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('START DEMO'));
+    await tester.tap(find.text('START SOS'));
     await tester.pump(const Duration(seconds: 5));
     social.switchProfile('ayesha');
     await tester.pumpAndSettle();
-    expect(find.text('Demo SOS from Hammad'), findsOneWidget);
-    expect(find.text('Resolve demo'), findsNothing);
+    expect(find.text('SOS from Hammad'), findsOneWidget);
+    expect(find.text('I am safe'), findsNothing);
     social.switchProfile('sara');
     await tester.pumpAndSettle();
-    expect(find.text('Demo SOS from Hammad'), findsNothing);
+    expect(find.text('SOS from Hammad'), findsNothing);
     social.switchProfile('hammad');
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Resolve demo'));
+    await tester.ensureVisible(find.text('I am safe'));
     await tester.pump();
-    await tester.tap(find.text('Resolve demo'));
+    await tester.tap(find.text('I am safe'));
     await tester.pumpAndSettle();
     expect(social.visibleEvents.single.status, LocalSosStatus.resolved);
   });
@@ -126,9 +129,9 @@ void main() {
     final social = readyCircle();
     addTearDown(social.dispose);
     await tester.pumpWidget(SafeHerApp(social: social));
-    await tester.tap(find.text('Explore demo'));
+    await tester.tap(find.text('Get started'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('START DEMO'));
+    await tester.tap(find.text('START SOS'));
     await tester.pump();
     await tester.tap(find.byIcon(Icons.people_outline).last);
     await tester.pumpAndSettle();

@@ -67,7 +67,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
     if (emergency.status == EmergencyStatus.active && activeEventId == null) {
       try {
         if (social.currentUserId != sosOwner) {
-          throw StateError('Preview profile changed during countdown.');
+          throw StateError('Account changed during countdown.');
         }
         activeEventId = social.createSos().id;
       } on StateError {
@@ -101,7 +101,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
               Text(
                 emergency.status == EmergencyStatus.countdown
                     ? 'SOS starts in ${emergency.remaining}s'
-                    : 'Your demo SOS is active',
+                    : 'SOS active · not delivered',
               ),
               TextButton(
                 onPressed: () => _finishSos(cancelled: true),
@@ -146,53 +146,20 @@ class _SafeHerShellState extends State<SafeHerShell> {
             'SafeHer',
             style: TextStyle(fontWeight: FontWeight.w800),
           ),
-          actions: const [
-            Padding(
-              padding: EdgeInsets.only(right: 20),
-              child: Chip(
-                avatar: Icon(Icons.science_outlined, size: 16),
-                label: Text('Demo mode'),
+          actions: [
+            IconButton(
+              tooltip: 'Account settings',
+              onPressed: () => setState(() => page = 3),
+              icon: CircleAvatar(
+                radius: 17,
+                child: Text(social.currentUser.name.substring(0, 1)),
               ),
             ),
+            const SizedBox(width: 12),
           ],
         ),
         body: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: Wrap(
-                spacing: 16,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  const Text(
-                    'Preview as',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  DropdownButton<String>(
-                    key: const ValueKey('profile-switch'),
-                    value: social.currentUserId,
-                    items: [
-                      for (final person in social.profiles)
-                        DropdownMenuItem(
-                          value: person.id,
-                          child: Text(person.name),
-                        ),
-                    ],
-                    onChanged: emergency.status == EmergencyStatus.countdown
-                        ? null
-                        : (id) {
-                            if (id != null) social.switchProfile(id);
-                          },
-                  ),
-                  Text(
-                    emergency.status == EmergencyStatus.countdown
-                        ? 'Finish or cancel countdown to switch'
-                        : 'Local demo profiles · no internet delivery',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
             if (emergency.status != EmergencyStatus.idle &&
                 sosOwner == social.currentUserId &&
                 page != 0)
@@ -207,7 +174,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
                       Text(
                         emergency.status == EmergencyStatus.countdown
                             ? 'SOS starts in ${emergency.remaining}s'
-                            : 'Your demo SOS is active',
+                            : 'SOS active · not delivered',
                       ),
                       TextButton(
                         onPressed: () => _finishSos(cancelled: true),
@@ -230,11 +197,9 @@ class _SafeHerShellState extends State<SafeHerShell> {
                 color: const Color(0xFFFCE4EA),
                 child: ListTile(
                   leading: const Icon(Icons.sos, color: Colors.red),
-                  title: Text(
-                    'Demo SOS from ${social.person(event.senderId).name}',
-                  ),
+                  title: Text('SOS from ${social.person(event.senderId).name}'),
                   subtitle: const Text(
-                    'Received locally as an approved favorite contact. No live location.',
+                    'Location unavailable. Connection required.',
                   ),
                   trailing: TextButton(
                     onPressed: () => setState(() => page = 2),
@@ -330,12 +295,12 @@ class _SafeHerShellState extends State<SafeHerShell> {
                 onPressed: () => setState(() => onboarded = true),
                 child: const Padding(
                   padding: EdgeInsets.all(14),
-                  child: Text('Explore demo'),
+                  child: Text('Get started'),
                 ),
               ),
               const SizedBox(height: 16),
               const Text(
-                'Local demonstration only. Switch demo profiles to try requests, chat and favorite SOS contacts. Live services will be added later.',
+                'Your circle. Your choice. Your safety.',
                 textAlign: TextAlign.center,
               ),
             ],
@@ -362,13 +327,13 @@ class _SafeHerShellState extends State<SafeHerShell> {
       const SizedBox(height: 24),
       _panel(
         Icons.info_outline,
-        'Practice safely',
-        'Try SOS with approved favorite contacts using the demo profiles above. No internet notifications, media or location are sent.',
+        'Your safety, one touch away',
+        'Choose the people you trust. Select approved favorite contacts for your SOS.',
       ),
       const SizedBox(height: 28),
       Center(
         child: Semantics(
-          label: 'Start demonstration SOS countdown',
+          label: 'Start SOS countdown',
           button: true,
           child: SizedBox(
             width: 220,
@@ -393,8 +358,8 @@ class _SafeHerShellState extends State<SafeHerShell> {
                     counting
                         ? '${emergency.remaining}'
                         : active
-                        ? 'DEMO ACTIVE'
-                        : 'START DEMO',
+                        ? 'SOS ACTIVE'
+                        : 'START SOS',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ],
@@ -406,12 +371,12 @@ class _SafeHerShellState extends State<SafeHerShell> {
       const SizedBox(height: 24),
       Text(
         counting
-            ? 'Demo starts in ${emergency.remaining} seconds'
+            ? 'SOS starts in ${emergency.remaining} seconds'
             : active
-            ? 'Demo SOS active — shared with selected demo profiles'
+            ? 'SOS active · not delivered'
             : emergency.status != EmergencyStatus.idle
-            ? 'Another demo profile has an active SOS'
-            : 'Tap to practice an SOS',
+            ? 'Another account has an active SOS'
+            : 'Tap to start an SOS',
         textAlign: TextAlign.center,
         style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 17),
       ),
@@ -419,12 +384,12 @@ class _SafeHerShellState extends State<SafeHerShell> {
         const SizedBox(height: 16),
         FilledButton.tonal(
           onPressed: () => _finishSos(cancelled: counting),
-          child: Text(counting ? 'Cancel countdown' : 'Resolve demo'),
+          child: Text(counting ? 'Cancel countdown' : 'I am safe'),
         ),
         if (active)
           TextButton(
             onPressed: () => _finishSos(cancelled: true),
-            child: const Text('Cancel demo / false alarm'),
+            child: const Text('Cancel SOS / false alarm'),
           ),
       ],
       const SizedBox(height: 28),
@@ -443,36 +408,66 @@ class _SafeHerShellState extends State<SafeHerShell> {
       _panel(
         Icons.location_off_outlined,
         'Location is not being shared',
-        'Live location is planned for the connected app and will require your permission.',
+        'Location access is off. Your location is not being shared.',
       ),
     ];
   }
 
   List<Widget> _history() => [
-    _heading(
-      'Your activity',
-      'Local SOS events visible to ${social.currentUser.name}.',
-    ),
+    _heading('Your activity', 'Your SOS history and updates.'),
     for (final event in social.visibleEvents.reversed)
       _panel(
         Icons.sos,
         '${social.person(event.senderId).name} · ${event.status.name}',
-        '${event.createdAt.toLocal().toString().substring(0, 16)}\nSelected recipients: ${event.recipientIds.map((id) => social.person(id).name).join(', ')}\nLocal preview event — no internet delivery.',
+        '${event.createdAt.toLocal().toString().substring(0, 16)}\nSelected recipients: ${event.recipientIds.map((id) => social.person(id).name).join(', ')}\nDelivery: not connected.',
       ),
     if (social.visibleEvents.isEmpty)
       _panel(
         Icons.history,
         'A fresh start',
-        'Your completed or cancelled demo events will appear here.',
+        'Your SOS activity will appear here.',
       ),
     const SizedBox(height: 16),
-    const Text(
-      'Demo activity is held in memory and clears when the app restarts.',
-    ),
+    const Text('History is not synced to an account yet.'),
   ];
 
   List<Widget> _settings() => [
     _heading('Make it yours', 'Understand what your app can do.'),
+    Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Account',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            DropdownButton<String>(
+              key: const ValueKey('profile-switch'),
+              value: social.currentUserId,
+              items: [
+                for (final person in social.profiles)
+                  DropdownMenuItem(value: person.id, child: Text(person.name)),
+              ],
+              onChanged: emergency.status == EmergencyStatus.countdown
+                  ? null
+                  : (id) {
+                      if (id != null) social.switchProfile(id);
+                    },
+            ),
+            Text(
+              '@${social.currentUser.username}',
+              style: const TextStyle(color: Colors.black54),
+            ),
+            if (emergency.status == EmergencyStatus.countdown)
+              const Text(
+                'Finish or cancel the countdown before switching accounts.',
+              ),
+          ],
+        ),
+      ),
+    ),
     Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -500,23 +495,23 @@ class _SafeHerShellState extends State<SafeHerShell> {
     ),
     _panel(
       Icons.cloud_off_outlined,
-      'Firebase not connected',
-      'Friends, chat and SOS routing currently work between local demo profiles. Real accounts, delivery and location will be implemented when Firebase is added.',
+      'Connection unavailable',
+      'Messages and alerts are not delivered to other devices. Account sync is unavailable.',
     ),
     _panel(
       Icons.videocam_off_outlined,
       'Media is optional',
-      'A future live session will require consent and visible camera/microphone controls. Media availability must never block SOS.',
+      'You control camera and microphone access. Calls are currently unavailable.',
     ),
     _panel(
       Icons.touch_app_outlined,
       'Device shortcuts',
-      'Power-button interception is not universally available. Hardware shortcuts are not enabled in this foundation.',
+      'Hardware shortcuts are unavailable on this device. Use the SOS button on Home.',
     ),
     _panel(
       Icons.privacy_tip_outlined,
       'Privacy first',
-      'This demo stores no account or location data. Live account deletion and retention controls will be added with the backend.',
+      'Control who receives your SOS in Contacts. You can remove a favorite or revoke approval at any time.',
     ),
   ];
 

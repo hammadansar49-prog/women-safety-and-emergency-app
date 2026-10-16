@@ -68,14 +68,12 @@ void main() {
       await openChat(tester);
       await tester.tap(find.byTooltip(label));
       await tester.pumpAndSettle();
-      expect(find.text('Call preview — no live connection'), findsOneWidget);
+      expect(find.text('Unable to connect'), findsOneWidget);
       expect(
-        find.text(
-          'Live calls will be connected in the Firebase/WebRTC phase. Camera and microphone are not active.',
-        ),
+        find.text('Calling is unavailable. Camera and microphone are off.'),
         findsOneWidget,
       );
-      await tester.tap(find.text('End call preview'));
+      await tester.tap(find.text('Back to chat'));
       await tester.pumpAndSettle();
       expect(find.byType(TextField), findsOneWidget);
     });

@@ -171,7 +171,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
             key: ValueKey('search-${social.currentUserId}'),
             decoration: const InputDecoration(
               labelText: 'Find by username',
-              hintText: 'Try ayesha, sara or hammad',
+              hintText: 'Enter a username',
               prefixIcon: Icon(Icons.search),
               border: OutlineInputBorder(),
             ),
@@ -179,7 +179,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
           ),
           if (query.trim().isNotEmpty) ...[
             const SizedBox(height: 12),
-            if (results.isEmpty) const Text('No matching demo profile.'),
+            if (results.isEmpty) const Text('No matching user.'),
             for (final person in results)
               Card(
                 child: Padding(
@@ -236,7 +236,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
           for (final request in social.pendingOutgoing)
             _request(
               'Waiting for ${social.person(request.toId).name}',
-              'Switch the preview profile above to respond as this person.',
+              'Your friend request is awaiting a response.',
               [
                 TextButton(
                   onPressed: () =>
@@ -314,7 +314,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
             ),
           const SizedBox(height: 16),
           const Text(
-            'Local preview: switch demo profiles above to accept requests or reply. Data clears on restart; nothing is sent over the internet.',
+            'Manage SOS access through your approved favorite contacts.',
             style: TextStyle(color: Colors.black54),
           ),
         ],

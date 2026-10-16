@@ -28,8 +28,8 @@ class EmergencyController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void cancel() => _finish('Demo cancelled');
-  void resolve() => _finish('Demo resolved');
+  void cancel() => _finish('SOS cancelled');
+  void resolve() => _finish('SOS resolved');
 
   void _finish(String outcome) {
     if (status == EmergencyStatus.idle) return;

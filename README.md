@@ -8,9 +8,9 @@ Material 3 onboarding, home, friends/chat, activity and settings. The local prev
 
 ### Try the complete local flow
 
-1. Choose **Explore demo**. In Contacts search `ayesha` while previewing as Hammad, then **Send request**.
-2. Use **Preview as** to switch to Ayesha. Open Contacts and **Accept** Hammad's request.
-3. Switch back to Hammad. Tap Ayesha to open chat, type a message, and use the audio/video icons to inspect the call previews. Switch profiles from the main screen to reply as the other person.
+1. Choose **Get started**. In Contacts search `ayesha` while previewing as Hammad, then **Send request**.
+2. Open **Settings > Account** and switch to Ayesha. Open Contacts and **Accept** Hammad's request.
+3. Switch back to Hammad. Tap Ayesha to open chat, type a message, and use the audio/video icons to inspect the call previews. Switch profiles from Settings > Account to reply as the other person.
 4. On Hammad's Contacts screen, hold Ayesha for **1.5 seconds** or open her three-dot menu. Choose **Add to favorite SOS contact**.
 5. Switch to Ayesha and **Approve SOS** in Contacts. This separate approval preserves the PDF's mutual-consent requirement.
 6. Switch to Hammad and start SOS. After the countdown, switch to Ayesha to see the incoming local SOS banner; Sara receives nothing. Switch back to Hammad to cancel/resolve it. Activity shows timestamp, status and selected recipients.
@@ -27,7 +27,7 @@ flutter run -d chrome
 flutter run
 ```
 
-Use Explore demo on onboarding. Android requires a configured SDK/JDK and a connected phone or emulator.
+Use Get started on onboarding. Android requires a configured SDK/JDK and a connected phone or emulator.
 
 ### Browser preview without installing the APK
 
@@ -72,3 +72,7 @@ Friends/chat follow-up: `flutter analyze` clean; all **24 tests passed**; `flutt
 - `flutter test`: all 4 tests passed.
 - `flutter build apk --debug`: succeeded, output `build/app/outputs/flutter-apk/app-debug.apk`.
 - No physical Android device testing has been performed. Android doctor reports missing command-line tools despite this successful debug build.
+
+## Product presentation
+
+The UI uses normal SafeHer branding without Demo or Preview labels. The account selector is in Settings, not in a testing bar on every screen. The backend remains disconnected: calls show Unable to connect, SOS delivery is marked not delivered, and message status states that no connection exists. This presentation change does not add networking or persistent storage.

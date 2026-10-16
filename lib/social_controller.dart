@@ -89,7 +89,7 @@ class SocialController extends ChangeNotifier {
   String _pair(String a, String b) => a.compareTo(b) < 0 ? '$a:$b' : '$b:$a';
   DemoPerson person(String id) => profiles.firstWhere(
     (p) => p.id == id,
-    orElse: () => throw StateError('Unknown demo profile.'),
+    orElse: () => throw StateError('Unknown account.'),
   );
   void switchProfile(String id) {
     person(id);

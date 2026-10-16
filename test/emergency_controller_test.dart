@@ -18,7 +18,7 @@ void main() {
       state.tick();
     }
     expect(state.status, EmergencyStatus.idle);
-    expect(state.history.single, 'Demo cancelled');
+    expect(state.history.single, 'SOS cancelled');
     state.dispose();
   });
   test('countdown activates and resolution records the result', () {
@@ -30,7 +30,7 @@ void main() {
     expect(state.status, EmergencyStatus.active);
     state.resolve();
     expect(state.status, EmergencyStatus.idle);
-    expect(state.history.single, 'Demo resolved');
+    expect(state.history.single, 'SOS resolved');
     state.dispose();
   });
 }
