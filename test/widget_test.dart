@@ -26,6 +26,19 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('Get started'));
     await tester.pumpAndSettle();
+    expect(find.text('Choose your username'), findsOneWidget);
+    await tester.enterText(find.byType(TextFormField), 'AYESHA');
+    await tester.ensureVisible(find.text('Save username'));
+    await tester.tap(find.text('Save username'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('This username is already taken. Try another.'),
+      findsOneWidget,
+    );
+    await tester.enterText(find.byType(TextFormField), 'meethamad');
+    await tester.ensureVisible(find.text('Save username'));
+    await tester.tap(find.text('Save username'));
+    await tester.pumpAndSettle();
     expect(find.text('SafeHer'), findsOneWidget);
     expect(find.text('Demo mode'), findsNothing);
     await tester.tap(find.byIcon(Icons.settings_outlined));

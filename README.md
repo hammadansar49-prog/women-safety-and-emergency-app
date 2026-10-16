@@ -75,4 +75,8 @@ Friends/chat follow-up: `flutter analyze` clean; all **24 tests passed**; `flutt
 
 ## Product presentation
 
+First entry now asks for a unique username before Home. Usernames are normalized to lowercase, use 3–20 letters/digits/underscores, and are checked again when saved. Friends search finds the saved username; existing configured accounts skip setup. The 26-test suite covers duplicate rejection, normalization, invalid names, setup and search-to-request behavior.
+
+This is still session-only: Google sign-in and global username reservation are not connected, and refresh resets local accounts. Firebase integration must atomically reserve `usernames/{normalizedUsername}` for the authenticated UID together with the user profile. Security rules/server validation must prevent overwrites and impersonation; a client-side availability check alone is insufficient.
+
 The UI uses normal SafeHer branding without Demo or Preview labels. The account selector is in Settings, not in a testing bar on every screen. The backend remains disconnected: calls show Unable to connect, SOS delivery is marked not delivered, and message status states that no connection exists. This presentation change does not add networking or persistent storage.

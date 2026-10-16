@@ -67,11 +67,48 @@ class LocalSosEvent {
 
 /// Session-only demo state. No messages or alerts are sent over a network.
 class SocialController extends ChangeNotifier {
-  final List<DemoPerson> profiles = const [
+  SocialController({bool newAccount = false}) {
+    if (newAccount) {
+      _profiles[0] = const DemoPerson(
+        id: 'hammad',
+        name: 'Hammad',
+        username: '',
+      );
+    }
+  }
+  final List<DemoPerson> _profiles = [
     DemoPerson(id: 'hammad', name: 'Hammad', username: 'hammad'),
     DemoPerson(id: 'ayesha', name: 'Ayesha', username: 'ayesha'),
     DemoPerson(id: 'sara', name: 'Sara', username: 'sara'),
   ];
+  List<DemoPerson> get profiles => List.unmodifiable(_profiles);
+
+  String? usernameError(String input) {
+    final username = input.trim().toLowerCase();
+    if (!RegExp(r'^[a-z0-9_]{3,20}$').hasMatch(username)) {
+      return 'Use 3–20 letters, numbers or underscores.';
+    }
+    if (_profiles.any((p) => p.username.toLowerCase() == username)) {
+      return 'This username is already taken. Try another.';
+    }
+    return null;
+  }
+
+  void claimUsername(String input) {
+    if (currentUser.username.isNotEmpty) {
+      throw StateError('Your username is already set.');
+    }
+    final error = usernameError(input);
+    if (error != null) throw StateError(error);
+    final index = _profiles.indexWhere((p) => p.id == currentUserId);
+    _profiles[index] = DemoPerson(
+      id: currentUserId,
+      name: currentUser.name,
+      username: input.trim().toLowerCase(),
+    );
+    notifyListeners();
+  }
+
   String _currentUserId = 'hammad';
   String get currentUserId => _currentUserId;
   DemoPerson get currentUser => person(currentUserId);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'emergency_controller.dart';
 import 'social_controller.dart';
 import 'contacts_screen.dart';
+import 'username_screen.dart';
 
 void main() => runApp(const SafeHerApp());
 
@@ -43,7 +44,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
   @override
   void initState() {
     super.initState();
-    social = widget.social ?? SocialController();
+    social = widget.social ?? SocialController(newAccount: true);
     emergency.addListener(_syncEmergency);
   }
 
@@ -140,6 +141,12 @@ class _SafeHerShellState extends State<SafeHerShell> {
     listenable: Listenable.merge([emergency, social]),
     builder: (context, _) {
       if (!onboarded) return _welcome();
+      if (social.currentUser.username.isEmpty) {
+        return UsernameScreen(
+          key: ValueKey(social.currentUserId),
+          social: social,
+        );
+      }
       return Scaffold(
         appBar: AppBar(
           title: const Text(
