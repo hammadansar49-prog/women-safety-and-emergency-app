@@ -80,7 +80,7 @@ The UI uses normal SafeHer branding without Demo or Preview labels. Profile is s
 
 ## Local data and profile photos
 
-Profile > Change photo opens the device gallery/file picker. Valid images up to 10 MB and 40 megapixels are decoded to a 384px PNG thumbnail and saved as image bytes, not a temporary picker path. Android lost-picker data is recovered at startup. Android and web are the current targets; no physical-phone verification has been performed.
+Tap the profile photo circle to open Upload photo. Once a photo exists, the same circle offers Change photo and Remove photo. Upload/Change opens the device gallery/file picker. Valid images up to 10 MB and 40 megapixels are decoded to a 384px PNG thumbnail and saved as image bytes, not a temporary picker path. Android lost-picker data is recovered at startup. Android and web are the current targets; no physical-phone verification has been performed.
 
 Every social-state change queues an ordered database write. Saving errors show a Retry action; logout waits for writes. Startup loads the database before rendering the account and refuses to silently overwrite unreadable data. Logout preserves the account and returns to onboarding; this is not authenticated sign-in yet. Active local SOS records recover their stop controls after restart; a countdown interrupted before activation is not resumed.
 

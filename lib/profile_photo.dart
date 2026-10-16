@@ -93,20 +93,65 @@ class _ProfilePhotoEditorState extends State<ProfilePhotoEditor> {
     }
   }
 
+  Future<void> showOptions() async {
+    final owner = widget.social.currentUserId;
+    final hasPhoto = widget.social.photoFor(owner) != null;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: Text(hasPhoto ? 'Change photo' : 'Upload photo'),
+              onTap: () => Navigator.pop(context, 'upload'),
+            ),
+            if (hasPhoto)
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('Remove photo'),
+                onTap: () => Navigator.pop(context, 'remove'),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || owner != widget.social.currentUserId) return;
+    if (action == 'upload') await choose();
+    if (action == 'remove') {
+      widget.social.setPhoto(null);
+      setState(() => error = null);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Column(
     children: [
-      profileAvatar(widget.social, 44),
-      TextButton.icon(
-        onPressed: busy ? null : choose,
-        icon: const Icon(Icons.add_photo_alternate_outlined),
-        label: Text(busy ? 'Saving photo…' : 'Change photo'),
-      ),
-      if (widget.social.photoFor(widget.social.currentUserId) != null)
-        TextButton(
-          onPressed: busy ? null : () => widget.social.setPhoto(null),
-          child: const Text('Remove photo'),
+      Semantics(
+        button: true,
+        label: 'Profile photo options',
+        child: InkWell(
+          key: const ValueKey('profile-photo-button'),
+          onTap: busy ? null : showOptions,
+          customBorder: const CircleBorder(),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              profileAvatar(widget.social, 44),
+              if (busy)
+                const SizedBox(
+                  width: 88,
+                  height: 88,
+                  child: CircularProgressIndicator(
+                    semanticsLabel: 'Saving photo',
+                  ),
+                ),
+            ],
+          ),
         ),
+      ),
       if (error != null)
         Text(
           error!,
