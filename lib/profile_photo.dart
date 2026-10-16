@@ -3,54 +3,81 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
 import 'social_controller.dart';
+import 'photo_crop_screen.dart';
+import 'photo_decoder.dart';
 
 Future<String> prepareProfilePhoto(XFile file) async {
-  if (await file.length() > 10 * 1024 * 1024) {
-    throw StateError('Choose an image smaller than 10 MB.');
-  }
-  final buffer = await ui.ImmutableBuffer.fromUint8List(
-    await file.readAsBytes(),
-  );
-  final descriptor = await ui.ImageDescriptor.encoded(buffer);
+  final bytes = await file.readAsBytes();
+  // Decode at thumbnail width. Encoded descriptor dimensions are unavailable on web.
+  final decoded = await decodeProfileImage(bytes, targetWidth: 512);
   try {
-    if (descriptor.width * descriptor.height > 40000000) {
-      throw StateError('Choose a smaller image.');
-    }
-    final width = descriptor.width > descriptor.height
-        ? 384
-        : (384 * descriptor.width / descriptor.height).round().clamp(1, 384);
-    final height = descriptor.height >= descriptor.width
-        ? 384
-        : (384 * descriptor.height / descriptor.width).round().clamp(1, 384);
-    final codec = await descriptor.instantiateCodec(
-      targetWidth: width,
-      targetHeight: height,
+    final source = decoded;
+    final ratio =
+        512 / (source.width > source.height ? source.width : source.height);
+    final scale = ratio < 1 ? ratio : 1.0;
+    final width = (source.width * scale).round().clamp(1, 512);
+    final height = (source.height * scale).round().clamp(1, 512);
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder);
+    canvas.drawImageRect(
+      source,
+      ui.Rect.fromLTWH(0, 0, source.width.toDouble(), source.height.toDouble()),
+      ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+      ui.Paint()..filterQuality = ui.FilterQuality.high,
     );
+    final picture = recorder.endRecording();
     try {
-      final frame = await codec.getNextFrame();
+      final thumbnail = await picture.toImage(width, height);
       try {
-        final data = await frame.image.toByteData(
-          format: ui.ImageByteFormat.png,
+        final data = await thumbnail.toByteData(
+          format: ui.ImageByteFormat.rawStraightRgba,
         );
-        return base64Encode(data!.buffer.asUint8List());
+        if (data == null) throw StateError('Image conversion failed.');
+        return compute(_encodeProfileThumbnail, {
+          'bytes': data.buffer.asUint8List(
+            data.offsetInBytes,
+            data.lengthInBytes,
+          ),
+          'width': width,
+          'height': height,
+        });
       } finally {
-        frame.image.dispose();
+        thumbnail.dispose();
       }
     } finally {
-      codec.dispose();
+      picture.dispose();
     }
   } finally {
-    descriptor.dispose();
-    buffer.dispose();
+    decoded.dispose();
   }
+}
+
+String _encodeProfileThumbnail(Map<String, Object> input) {
+  final bytes = input['bytes'] as Uint8List;
+  final image = img.Image.fromBytes(
+    width: input['width'] as int,
+    height: input['height'] as int,
+    bytes: bytes.buffer,
+    bytesOffset: bytes.offsetInBytes,
+    numChannels: 4,
+    order: img.ChannelOrder.rgba,
+  );
+  final png = img.encodePng(image);
+  // Preserve transparency. For opaque photos choose the smaller encoding.
+  if (image.any((pixel) => pixel.a < 255)) return base64Encode(png);
+  final jpeg = img.encodeJpg(image, quality: 92);
+  return base64Encode(jpeg.length < png.length ? jpeg : png);
 }
 
 Widget profileAvatar(SocialController social, double radius) {
   final photo = social.photoFor(social.currentUserId);
   return CircleAvatar(
     radius: radius,
-    backgroundImage: photo == null ? null : MemoryImage(base64Decode(photo)),
+    backgroundImage: photo == null
+        ? null
+        : ProfileMemoryImage(base64Decode(photo)),
     child: photo == null ? Text(social.currentUser.name.substring(0, 1)) : null,
   );
 }
@@ -72,21 +99,36 @@ class _ProfilePhotoEditorState extends State<ProfilePhotoEditor> {
       busy = true;
       error = null;
     });
+    var stage = 'picker';
     try {
       final file = await ImagePicker().pickImage(
         source: ImageSource.gallery,
         requestFullMetadata: false,
       );
       if (file == null) return;
-      final data = await prepareProfilePhoto(file);
+      stage = 'image';
+      final bytes = await file.readAsBytes();
       if (!mounted || owner != widget.social.currentUserId) return;
+      final cropped = await Navigator.push<Uint8List>(
+        context,
+        MaterialPageRoute(builder: (_) => PhotoCropScreen(bytes: bytes)),
+      );
+      if (cropped == null) return;
+      final data = await prepareProfilePhoto(XFile.fromData(cropped));
+      if (!mounted || owner != widget.social.currentUserId) return;
+      stage = 'save';
       widget.social.setPhoto(data);
       await widget.social.flush();
-    } catch (_) {
+    } catch (exception) {
       if (mounted) {
         setState(
-          () => error =
-              'Photo could not be loaded or saved. Use a valid image under 10 MB and try again.',
+          () => error = stage == 'save'
+              ? 'Photo selected, but not saved. Check device storage and tap Retry above.'
+              : stage == 'picker'
+              ? 'Could not open photos. Please try again.'
+              : exception is StateError
+              ? exception.message
+              : 'This image could not be read. Try a JPG, PNG or WebP photo.',
         );
       }
     } finally {

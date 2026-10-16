@@ -1,4 +1,4 @@
-﻿# SafeHer
+# SafeHer
 
 Android women safety and emergency coordination FYP. Requirements: `SafeHer_FYP_Complete_Project_Specification_for_Codex.pdf`.
 
@@ -80,7 +80,7 @@ The UI uses normal SafeHer branding without Demo or Preview labels. Profile is s
 
 ## Local data and profile photos
 
-Tap the animated profile photo circle to open a centered Upload photo dialog. Once a photo exists, the same circle offers Change photo and Remove photo. Upload/Change opens the device gallery/file picker. Valid images up to 10 MB and 40 megapixels are decoded to a 384px PNG thumbnail and saved as image bytes, not a temporary picker path. Android lost-picker data is recovered at startup. Android and web are the current targets; no physical-phone verification has been performed.
+Tap the animated profile photo circle to open a centered Upload photo dialog. Once a photo exists, the same circle offers Change photo and Remove photo. Upload/Change opens the device gallery/file picker, followed by a crop screen with drag, pinch/slider zoom, circular preview, Reset, Save photo and Cancel. Confirmed crops are square; cancelling preserves the previous photo. Images are automatically resized to a maximum 512px edge while preserving aspect ratio, then saved as the smaller of high-quality JPEG (quality 92, full chroma) and PNG. Transparent images remain PNG. There is no arbitrary 10 MB rejection. The original photo remains unchanged; the optimized bytes are saved, not a temporary picker path. Unsupported/corrupt images or device resource/storage failures still report actionable errors. Android lost-picker data is recovered at startup. Android and web are the current targets; no physical-phone verification has been performed.
 
 Every social-state change queues an ordered database write. Saving errors show a Retry action; logout waits for writes. Startup loads the database before rendering the account and refuses to silently overwrite unreadable data. Logout preserves the account and returns to onboarding; this is not authenticated sign-in yet. Active local SOS records recover their stop controls after restart; a countdown interrupted before activation is not resumed.
 

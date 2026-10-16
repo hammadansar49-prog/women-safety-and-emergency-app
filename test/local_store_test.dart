@@ -59,8 +59,8 @@ void main() {
       final photo = await prepareProfilePhoto(XFile.fromData(bytes));
       final codec = await ui.instantiateImageCodec(base64Decode(photo));
       final frame = await codec.getNextFrame();
-      expect(frame.image.width, 384);
-      expect(frame.image.height, 192);
+      expect(frame.image.width, 512);
+      expect(frame.image.height, 256);
       frame.image.dispose();
       codec.dispose();
       image.dispose();
