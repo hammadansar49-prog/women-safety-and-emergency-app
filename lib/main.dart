@@ -3,8 +3,40 @@ import 'emergency_controller.dart';
 import 'social_controller.dart';
 import 'contacts_screen.dart';
 import 'username_screen.dart';
+import 'local_store.dart';
+import 'profile_photo.dart';
 
-void main() => runApp(const SafeHerApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    final social = await loadLocalAccount();
+    try {
+      await recoverProfilePhoto(social);
+    } catch (_) {
+      social.saveError =
+          'Could not recover the selected photo. Please choose it again.';
+    }
+    runApp(SafeHerApp(social: social));
+  } catch (_) {
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Saved data could not be opened. Your data has not been reset.',
+                ),
+                FilledButton(onPressed: main, child: const Text('Retry')),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class SafeHerApp extends StatefulWidget {
   const SafeHerApp({super.key, this.social});
@@ -14,35 +46,46 @@ class SafeHerApp extends StatefulWidget {
 }
 
 class _SafeHerAppState extends State<SafeHerApp> {
-  ThemeMode themeMode = ThemeMode.system;
+  late final SocialController social =
+      widget.social ?? SocialController(newAccount: true);
+  ThemeMode get themeMode => ThemeMode.values.byName(social.appearance);
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'SafeHer',
-    debugShowCheckedModeBanner: false,
-    theme: ThemeData(
-      useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6552A3)),
-      scaffoldBackgroundColor: const Color(0xFFF7F6FB),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFFF7F6FB),
-        centerTitle: false,
+  void dispose() {
+    if (widget.social == null) social.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: social,
+    builder: (context, _) => MaterialApp(
+      title: 'SafeHer',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6552A3)),
+        scaffoldBackgroundColor: const Color(0xFFF7F6FB),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFFF7F6FB),
+          centerTitle: false,
+        ),
+        cardTheme: const CardThemeData(elevation: 0, color: Colors.white),
       ),
-      cardTheme: const CardThemeData(elevation: 0, color: Colors.white),
-    ),
-    darkTheme: ThemeData(
-      useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xFF6552A3),
-        brightness: Brightness.dark,
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF6552A3),
+          brightness: Brightness.dark,
+        ),
+        appBarTheme: const AppBarTheme(centerTitle: false),
+        cardTheme: const CardThemeData(elevation: 0),
       ),
-      appBarTheme: const AppBarTheme(centerTitle: false),
-      cardTheme: const CardThemeData(elevation: 0),
-    ),
-    themeMode: themeMode,
-    home: SafeHerShell(
-      social: widget.social,
       themeMode: themeMode,
-      onThemeChanged: (mode) => setState(() => themeMode = mode),
+      home: SafeHerShell(
+        social: social,
+        themeMode: themeMode,
+        onThemeChanged: (mode) => social.setAppearance(mode.name),
+      ),
     ),
   );
 }
@@ -72,7 +115,34 @@ class _SafeHerShellState extends State<SafeHerShell> {
   void initState() {
     super.initState();
     social = widget.social ?? SocialController(newAccount: true);
+    onboarded = social.signedIn;
+    emergency.countdownSeconds = social.countdown;
+    for (final event in social.visibleEvents) {
+      if (event.senderId == social.currentUserId &&
+          event.status == LocalSosStatus.active) {
+        sosOwner = event.senderId;
+        activeEventId = event.id;
+        emergency.status = EmergencyStatus.active;
+      }
+    }
     emergency.addListener(_syncEmergency);
+  }
+
+  Widget _storageStatus() {
+    if (social.saveError != null) {
+      return Material(
+        color: Theme.of(context).colorScheme.errorContainer,
+        child: ListTile(
+          title: Text(social.saveError!),
+          trailing: TextButton(
+            onPressed: social.retrySave,
+            child: const Text('Retry'),
+          ),
+        ),
+      );
+    }
+    if (social.saving) return const LinearProgressIndicator();
+    return const SizedBox.shrink();
   }
 
   void _openProfile() {
@@ -92,12 +162,8 @@ class _SafeHerShellState extends State<SafeHerShell> {
                       child: ListView(
                         padding: const EdgeInsets.all(24),
                         children: [
-                          CircleAvatar(
-                            radius: 36,
-                            child: Text(
-                              social.currentUser.name.substring(0, 1),
-                            ),
-                          ),
+                          ProfilePhotoEditor(social: social),
+                          _storageStatus(),
                           const SizedBox(height: 20),
                           Text(
                             social.currentUser.name,
@@ -129,7 +195,17 @@ class _SafeHerShellState extends State<SafeHerShell> {
                           FilledButton.tonalIcon(
                             onPressed: emergency.status != EmergencyStatus.idle
                                 ? null
-                                : () {
+                                : () async {
+                                    try {
+                                      await social.flush();
+                                      social.setSignedIn(false);
+                                      await social.flush();
+                                    } catch (_) {
+                                      return;
+                                    }
+                                    if (!routeContext.mounted || !mounted) {
+                                      return;
+                                    }
                                     Navigator.of(routeContext).pop();
                                     setState(() {
                                       onboarded = false;
@@ -265,16 +341,14 @@ class _SafeHerShellState extends State<SafeHerShell> {
             IconButton(
               tooltip: 'Profile',
               onPressed: _openProfile,
-              icon: CircleAvatar(
-                radius: 17,
-                child: Text(social.currentUser.name.substring(0, 1)),
-              ),
+              icon: profileAvatar(social, 17),
             ),
             const SizedBox(width: 12),
           ],
         ),
         body: Column(
           children: [
+            _storageStatus(),
             if (emergency.status != EmergencyStatus.idle &&
                 sosOwner == social.currentUserId &&
                 page != 0)
@@ -407,7 +481,10 @@ class _SafeHerShellState extends State<SafeHerShell> {
               ),
               const SizedBox(height: 24),
               FilledButton(
-                onPressed: () => setState(() => onboarded = true),
+                onPressed: () {
+                  social.setSignedIn(true);
+                  setState(() => onboarded = true);
+                },
                 child: const Padding(
                   padding: EdgeInsets.all(14),
                   child: Text('Get started'),
@@ -599,8 +676,10 @@ class _SafeHerShellState extends State<SafeHerShell> {
                 ButtonSegment(value: 10, label: Text('10 sec')),
               ],
               selected: {emergency.countdownSeconds},
-              onSelectionChanged: (values) =>
-                  setState(() => emergency.countdownSeconds = values.first),
+              onSelectionChanged: (values) => setState(() {
+                emergency.countdownSeconds = values.first;
+                social.setCountdown(values.first);
+              }),
             ),
           ],
         ),

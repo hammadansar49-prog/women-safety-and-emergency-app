@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 @immutable
@@ -65,7 +66,7 @@ class LocalSosEvent {
   final DateTime createdAt;
 }
 
-/// Session-only demo state. No messages or alerts are sent over a network.
+/// Local account state. Persistence is injected; networking is not connected.
 class SocialController extends ChangeNotifier {
   SocialController({bool newAccount = false}) {
     if (newAccount) {
@@ -76,6 +77,174 @@ class SocialController extends ChangeNotifier {
       );
     }
   }
+  factory SocialController.fromSnapshot(String value) {
+    final m = jsonDecode(value) as Map<String, dynamic>;
+    if (m['version'] != 1) {
+      throw const FormatException('Unsupported saved data');
+    }
+    final c = SocialController();
+    c._profiles.clear();
+    for (final p in m['profiles']) {
+      c._profiles.add(
+        DemoPerson(id: p['id'], name: p['name'], username: p['username']),
+      );
+    }
+    c._currentUserId = m['current'];
+    c.person(c._currentUserId);
+    c._sequence = m['sequence'];
+    c.signedIn = m['signedIn'];
+    c.appearance = m['appearance'] ?? 'system';
+    c.countdown = m['countdown'] ?? 5;
+    c._photos.addAll(Map<String, String>.from(m['photos']));
+    c._friendships.addAll(List<String>.from(m['friends']));
+    c._favorites.addAll(List<String>.from(m['favorites']));
+    c._approved.addAll(List<String>.from(m['approved']));
+    c._pendingConsent.addAll(List<String>.from(m['pending']));
+    for (final r in m['requests']) {
+      c._requests.add(
+        FriendRequest(id: r['id'], fromId: r['from'], toId: r['to']),
+      );
+    }
+    for (final r in m['messages']) {
+      c._messages.add(
+        ChatMessage(
+          id: r['id'],
+          senderId: r['from'],
+          recipientId: r['to'],
+          text: r['text'],
+          createdAt: DateTime.parse(r['time']),
+        ),
+      );
+    }
+    for (final r in m['events']) {
+      c._events.add(
+        LocalSosEvent(
+          id: r['id'],
+          senderId: r['from'],
+          recipientIds: List<String>.from(r['to']),
+          status: LocalSosStatus.values.byName(r['status']),
+          createdAt: DateTime.parse(r['time']),
+        ),
+      );
+    }
+    return c;
+  }
+
+  String snapshot() => jsonEncode({
+    'version': 1,
+    'current': currentUserId,
+    'sequence': _sequence,
+    'signedIn': signedIn,
+    'appearance': appearance,
+    'countdown': countdown,
+    'photos': _photos,
+    'profiles': [
+      for (final p in profiles)
+        {'id': p.id, 'name': p.name, 'username': p.username},
+    ],
+    'friends': _friendships.toList(),
+    'favorites': _favorites.toList(),
+    'approved': _approved.toList(),
+    'pending': _pendingConsent.toList(),
+    'requests': [
+      for (final r in _requests) {'id': r.id, 'from': r.fromId, 'to': r.toId},
+    ],
+    'messages': [
+      for (final r in _messages)
+        {
+          'id': r.id,
+          'from': r.senderId,
+          'to': r.recipientId,
+          'text': r.text,
+          'time': r.createdAt.toIso8601String(),
+        },
+    ],
+    'events': [
+      for (final r in _events)
+        {
+          'id': r.id,
+          'from': r.senderId,
+          'to': r.recipientIds,
+          'status': r.status.name,
+          'time': r.createdAt.toIso8601String(),
+        },
+    ],
+  });
+
+  Future<void> Function(String)? persist;
+  Future<void> _pendingSave = Future.value();
+  String? saveError;
+  bool saving = false;
+  bool _disposed = false;
+  int _saveRevision = 0;
+  bool signedIn = false;
+  String appearance = 'system';
+  int countdown = 5;
+  final Map<String, String> _photos = {};
+  String? photoFor(String id) => _photos[id];
+  void setPhoto(String? value) {
+    if (value == null) {
+      _photos.remove(currentUserId);
+    } else {
+      _photos[currentUserId] = value;
+    }
+    notifyListeners();
+  }
+
+  void setSignedIn(bool value) {
+    signedIn = value;
+    notifyListeners();
+  }
+
+  void setAppearance(String value) {
+    appearance = value;
+    notifyListeners();
+  }
+
+  void setCountdown(int value) {
+    countdown = value;
+    notifyListeners();
+  }
+
+  void retrySave() => notifyListeners();
+  Future<void> flush() async {
+    await _pendingSave;
+    if (saveError != null) throw StateError(saveError!);
+  }
+
+  @override
+  void notifyListeners() {
+    final write = persist;
+    if (write != null) {
+      final data = snapshot();
+      final revision = ++_saveRevision;
+      saving = true;
+      _pendingSave = _pendingSave.then((_) async {
+        try {
+          await write(data);
+          if (revision == _saveRevision) saveError = null;
+        } catch (_) {
+          if (revision == _saveRevision) {
+            saveError =
+                'Could not save on this device. Retry before closing the app.';
+          }
+        } finally {
+          if (revision == _saveRevision) {
+            saving = false;
+            if (!_disposed) super.notifyListeners();
+          }
+        }
+      });
+    }
+    super.notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
   final List<DemoPerson> _profiles = [
     DemoPerson(id: 'hammad', name: 'Hammad', username: 'hammad'),
     DemoPerson(id: 'ayesha', name: 'Ayesha', username: 'ayesha'),
