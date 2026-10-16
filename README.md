@@ -4,7 +4,18 @@ Android women safety and emergency coordination FYP. Requirements: `SafeHer_FYP_
 
 ## Current implementation
 
-Phase 1 foundation: Material 3 onboarding, home, contacts explanation, activity and settings. A clearly labelled local demo supports configurable SOS countdown, cancellation, duplicate activation prevention and resolution. Activity is in memory only. No real alert, tracking, media or authentication is performed.
+Material 3 onboarding, home, friends/chat, activity and settings. The local preview now supports sending/accepting/declining/cancelling friend requests, two-way messages between demo profiles, audio/video call preview screens, and favorite SOS contacts selected by a deliberate 1.5-second hold (or accessible options menu). SOS requires recipient approval and goes only to approved favorites. Requests, messages, preferences and activity remain in memory; there is no real network delivery, authentication, live media or tracking yet. The user has deferred Firebase integration.
+
+### Try the complete local flow
+
+1. Choose **Explore demo**. In Contacts search `ayesha` while previewing as Hammad, then **Send request**.
+2. Use **Preview as** to switch to Ayesha. Open Contacts and **Accept** Hammad's request.
+3. Switch back to Hammad. Tap Ayesha to open chat, type a message, and use the audio/video icons to inspect the call previews. Switch profiles from the main screen to reply as the other person.
+4. On Hammad's Contacts screen, hold Ayesha for **1.5 seconds** or open her three-dot menu. Choose **Add to favorite SOS contact**.
+5. Switch to Ayesha and **Approve SOS** in Contacts. This separate approval preserves the PDF's mutual-consent requirement.
+6. Switch to Hammad and start SOS. After the countdown, switch to Ayesha to see the incoming local SOS banner; Sara receives nothing. Switch back to Hammad to cancel/resolve it. Activity shows timestamp, status and selected recipients.
+
+Removing a favorite, revoking approval or removing a friend immediately removes recipient access. SOS status/cancellation remains visible on other tabs and inside chats/call previews. A declined/revoked favorite shows **approval needed** with an option to request approval again. Countdown profile switching is disabled to preserve sender identity.
 
 ## Run
 
@@ -22,9 +33,9 @@ Use Explore demo on onboarding. Android requires a configured SDK/JDK and a conn
 
 Double-click `preview.cmd`, keep its terminal open, and visit **http://localhost:8080** once Flutter reports that the app is being served. Alternatively run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/preview.ps1` from the project folder. To use another port, append `-Port 8081`.
 
-After code edits, press `r` in that terminal to reload or `R` to restart. Press `q` to stop. Reopen the launcher after restarting your computer. This previews the same Flutter UI; Android background services, hardware shortcuts and push delivery still require physical-device testing.
+The launcher builds and serves the web app using Python, so the in-app browser needs no debug extension. Keep the terminal open; Ctrl+C stops it. Rerun the launcher after code edits, then refresh your browser. Reopen it after restarting your computer. For Flutter development hot reload, append `-Development` (use Chrome with the Dart debug extension if required); `r` reloads and `R` restarts. This previews the same Flutter UI; Android background services, hardware shortcuts and push delivery still require physical-device testing.
 
-Firebase-dependent functionality is not implemented yet; supplying credentials alone will not enable it. The next phases require both code and project configuration.
+Firebase-backed functionality is not implemented yet; supplying credentials alone will not enable live delivery. Call screens explicitly remain previews with inactive camera/microphone. The next phases require both code and project configuration.
 
 ## Verification
 
@@ -53,6 +64,8 @@ Create a Firebase project and configure Android app `com.safeher.safeher`, Googl
 Android doctor currently reports missing SDK command-line tools. No Android phone was connected during the initial audit. Background camera/microphone startup and universal power-button shortcuts must not be promised. Notification processing is distinct from confirmed delivery.
 
 ## Initial verification results (2026-10-16)
+
+Friends/chat follow-up: `flutter analyze` clean; all **24 tests passed**; `flutter build web` succeeded. Browser verification exercised friend-request acceptance, a local chat message and the video-call preview. Automated tests verify exact 1.5-second hold timing, favorite-only routing, approval revocation, sender identity, and SOS cancellation from chat. These are local simulations, not live service tests. The previously built APK below predates this follow-up; use localhost for the current UI.
 
 - `dart format lib test`: completed; final run changed no files.
 - `flutter analyze`: no issues found.

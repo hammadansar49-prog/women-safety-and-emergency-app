@@ -1,5 +1,9 @@
 # SafeHer code review — 2026-10-16
 
+## Follow-up implementation
+
+The review below records the earlier `2fec7bb` foundation. The subsequent friends/chat phase adds working local profile-to-profile friend requests, timestamped messages, consent, favorite-only SOS routing and call preview routes. Firebase remains deferred by the user. Emergency controls now remain visible on other tabs and chat/call routes. Misleading configuration-only readiness copy was corrected. Consent rejection/revocation now has a distinct approval-needed state and resend action. Release signing, persistent storage and real service integrations remain pending. See README for the current flow and verification.
+
 Reviewed application commit `2fec7bb`, all Dart application/tests, Android build/manifest/Kotlin host, web host, dependencies and project documentation against the supplied specification. An independent reviewer also inspected the source. This is an early Phase 1 local demonstration, not the completed FYP.
 
 ## Findings and priorities

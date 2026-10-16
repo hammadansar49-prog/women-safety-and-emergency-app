@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'emergency_controller.dart';
+import 'social_controller.dart';
+import 'contacts_screen.dart';
 
 void main() => runApp(const SafeHerApp());
 
 class SafeHerApp extends StatelessWidget {
-  const SafeHerApp({super.key});
+  const SafeHerApp({super.key, this.social});
+  final SocialController? social;
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'SafeHer',
@@ -19,29 +22,122 @@ class SafeHerApp extends StatelessWidget {
       ),
       cardTheme: const CardThemeData(elevation: 0, color: Colors.white),
     ),
-    home: const SafeHerShell(),
+    home: SafeHerShell(social: social),
   );
 }
 
 class SafeHerShell extends StatefulWidget {
-  const SafeHerShell({super.key});
+  const SafeHerShell({super.key, this.social});
+  final SocialController? social;
   @override
   State<SafeHerShell> createState() => _SafeHerShellState();
 }
 
 class _SafeHerShellState extends State<SafeHerShell> {
   final emergency = EmergencyController();
+  late final SocialController social;
+  String? sosOwner;
+  String? activeEventId;
   bool onboarded = false;
   int page = 0;
   @override
+  void initState() {
+    super.initState();
+    social = widget.social ?? SocialController();
+    emergency.addListener(_syncEmergency);
+  }
+
+  void _startSos() {
+    if (social.eligibleRecipients.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Choose a favorite SOS contact and get their approval first.',
+          ),
+        ),
+      );
+      setState(() => page = 1);
+      return;
+    }
+    sosOwner = social.currentUserId;
+    emergency.start();
+  }
+
+  void _syncEmergency() {
+    if (emergency.status == EmergencyStatus.active && activeEventId == null) {
+      try {
+        if (social.currentUserId != sosOwner) {
+          throw StateError('Preview profile changed during countdown.');
+        }
+        activeEventId = social.createSos().id;
+      } on StateError {
+        emergency.cancel();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'SOS was not started: no approved favorite contacts remain.',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _routeSosBanner(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([emergency, social]),
+    builder: (context, _) {
+      if (emergency.status == EmergencyStatus.idle ||
+          social.currentUserId != sosOwner) {
+        return const SizedBox.shrink();
+      }
+      return Material(
+        color: const Color(0xFFFCE4EA),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Wrap(
+            spacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                emergency.status == EmergencyStatus.countdown
+                    ? 'SOS starts in ${emergency.remaining}s'
+                    : 'Your demo SOS is active',
+              ),
+              TextButton(
+                onPressed: () => _finishSos(cancelled: true),
+                child: const Text('Cancel SOS'),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+
+  void _finishSos({required bool cancelled}) {
+    if (social.currentUserId != sosOwner) return;
+    if (activeEventId != null) {
+      social.finishSos(activeEventId!, cancelled: cancelled);
+    }
+    if (cancelled) {
+      emergency.cancel();
+    } else {
+      emergency.resolve();
+    }
+    activeEventId = null;
+    sosOwner = null;
+  }
+
+  @override
   void dispose() {
     emergency.dispose();
+    if (widget.social == null) social.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: emergency,
+    listenable: Listenable.merge([emergency, social]),
     builder: (context, _) {
       if (!onboarded) return _welcome();
       return Scaffold(
@@ -60,20 +156,115 @@ class _SafeHerShellState extends State<SafeHerShell> {
             ),
           ],
         ),
-        body: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 650),
-            child: ListView(
-              padding: const EdgeInsets.all(24),
-              children: [
-                if (page == 0) ..._home(),
-                if (page == 1) ..._contacts(),
-                if (page == 2) ..._history(),
-                if (page == 3) ..._settings(),
-                const SizedBox(height: 24),
-              ],
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Wrap(
+                spacing: 16,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  const Text(
+                    'Preview as',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  DropdownButton<String>(
+                    key: const ValueKey('profile-switch'),
+                    value: social.currentUserId,
+                    items: [
+                      for (final person in social.profiles)
+                        DropdownMenuItem(
+                          value: person.id,
+                          child: Text(person.name),
+                        ),
+                    ],
+                    onChanged: emergency.status == EmergencyStatus.countdown
+                        ? null
+                        : (id) {
+                            if (id != null) social.switchProfile(id);
+                          },
+                  ),
+                  Text(
+                    emergency.status == EmergencyStatus.countdown
+                        ? 'Finish or cancel countdown to switch'
+                        : 'Local demo profiles · no internet delivery',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
             ),
-          ),
+            if (emergency.status != EmergencyStatus.idle &&
+                sosOwner == social.currentUserId &&
+                page != 0)
+              Material(
+                color: const Color(0xFFFCE4EA),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 12,
+                    children: [
+                      Text(
+                        emergency.status == EmergencyStatus.countdown
+                            ? 'SOS starts in ${emergency.remaining}s'
+                            : 'Your demo SOS is active',
+                      ),
+                      TextButton(
+                        onPressed: () => _finishSos(cancelled: true),
+                        child: const Text('Cancel SOS'),
+                      ),
+                      TextButton(
+                        onPressed: () => setState(() => page = 0),
+                        child: const Text('View SOS'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            for (final event in social.visibleEvents.where(
+              (e) =>
+                  e.senderId != social.currentUserId &&
+                  e.status == LocalSosStatus.active,
+            ))
+              Material(
+                color: const Color(0xFFFCE4EA),
+                child: ListTile(
+                  leading: const Icon(Icons.sos, color: Colors.red),
+                  title: Text(
+                    'Demo SOS from ${social.person(event.senderId).name}',
+                  ),
+                  subtitle: const Text(
+                    'Received locally as an approved favorite contact. No live location.',
+                  ),
+                  trailing: TextButton(
+                    onPressed: () => setState(() => page = 2),
+                    child: const Text('View'),
+                  ),
+                ),
+              ),
+            Expanded(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 650),
+                  child: ListView(
+                    padding: const EdgeInsets.all(24),
+                    children: [
+                      if (page == 0) ..._home(),
+                      if (page == 1)
+                        ContactsScreen(
+                          key: ValueKey(social.currentUserId),
+                          social: social,
+                          safetyBannerBuilder: _routeSosBanner,
+                        ),
+                      if (page == 2) ..._history(),
+                      if (page == 3) ..._settings(),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: page,
@@ -144,7 +335,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
               ),
               const SizedBox(height: 16),
               const Text(
-                'Local demonstration only. Google sign-in and real alerts require Firebase setup.',
+                'Local demonstration only. Switch demo profiles to try requests, chat and favorite SOS contacts. Live services will be added later.',
                 textAlign: TextAlign.center,
               ),
             ],
@@ -155,8 +346,9 @@ class _SafeHerShellState extends State<SafeHerShell> {
   );
 
   List<Widget> _home() {
-    final active = emergency.status == EmergencyStatus.active;
-    final counting = emergency.status == EmergencyStatus.countdown;
+    final ownEvent = sosOwner == social.currentUserId;
+    final active = ownEvent && emergency.status == EmergencyStatus.active;
+    final counting = ownEvent && emergency.status == EmergencyStatus.countdown;
     return [
       const Text(
         'A little peace of mind.',
@@ -171,7 +363,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
       _panel(
         Icons.info_outline,
         'Practice safely',
-        'This demo does not send notifications, capture media, or share your location.',
+        'Try SOS with approved favorite contacts using the demo profiles above. No internet notifications, media or location are sent.',
       ),
       const SizedBox(height: 28),
       Center(
@@ -183,7 +375,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
             height: 220,
             child: FilledButton(
               onPressed: emergency.status == EmergencyStatus.idle
-                  ? emergency.start
+                  ? _startSos
                   : null,
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFFC73550),
@@ -216,7 +408,9 @@ class _SafeHerShellState extends State<SafeHerShell> {
         counting
             ? 'Demo starts in ${emergency.remaining} seconds'
             : active
-            ? 'Demo SOS active — no alerts sent'
+            ? 'Demo SOS active — shared with selected demo profiles'
+            : emergency.status != EmergencyStatus.idle
+            ? 'Another demo profile has an active SOS'
             : 'Tap to practice an SOS',
         textAlign: TextAlign.center,
         style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 17),
@@ -224,69 +418,52 @@ class _SafeHerShellState extends State<SafeHerShell> {
       if (counting || active) ...[
         const SizedBox(height: 16),
         FilledButton.tonal(
-          onPressed: counting ? emergency.cancel : emergency.resolve,
+          onPressed: () => _finishSos(cancelled: counting),
           child: Text(counting ? 'Cancel countdown' : 'Resolve demo'),
         ),
         if (active)
           TextButton(
-            onPressed: emergency.cancel,
+            onPressed: () => _finishSos(cancelled: true),
             child: const Text('Cancel demo / false alarm'),
           ),
       ],
       const SizedBox(height: 28),
       _panel(
         Icons.people_outline,
-        '0 trusted contacts',
-        'Connect Firebase to find friends and mutually confirm emergency contacts.',
+        '${social.eligibleRecipients.length} ready favorite SOS contacts',
+        social.eligibleRecipients.isEmpty
+            ? 'Open Contacts, add a friend, then hold their name for 1.5 seconds to select them for SOS. They must approve.'
+            : 'SOS recipients: ${social.eligibleRecipients.map((p) => p.name).join(', ')}. Other friends will not receive SOS.',
+      ),
+      TextButton.icon(
+        onPressed: () => setState(() => page = 1),
+        icon: const Icon(Icons.people_outline),
+        label: const Text('Manage friends & SOS favorites'),
       ),
       _panel(
         Icons.location_off_outlined,
         'Location is not being shared',
-        'Live location becomes available in the connected app with your permission.',
+        'Live location is planned for the connected app and will require your permission.',
       ),
     ];
   }
 
-  List<Widget> _contacts() => [
-    _heading('Your trusted circle', 'People you choose. Access you control.'),
-    _panel(
-      Icons.person_add_alt,
-      'Connect with someone you trust',
-      'The connected app will let you search by username or invitation code.',
-    ),
-    _panel(
-      Icons.handshake_outlined,
-      'Two people. Clear consent.',
-      'Accepting a friend request does not grant emergency access. Both people must confirm trusted-contact status, and either can revoke it.',
-    ),
-    const SizedBox(height: 32),
-    const Icon(Icons.people_outline, size: 72, color: Color(0xFF6552A3)),
-    const SizedBox(height: 16),
-    const Text(
-      'No trusted contacts yet',
-      textAlign: TextAlign.center,
-      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 20),
-    ),
-    const SizedBox(height: 8),
-    const Text(
-      'Firebase is not configured. No contact requests can be sent in this demo.',
-      textAlign: TextAlign.center,
-    ),
-  ];
-
   List<Widget> _history() => [
-    _heading('Your activity', 'Local practice events from this session.'),
-    if (emergency.history.isEmpty)
+    _heading(
+      'Your activity',
+      'Local SOS events visible to ${social.currentUser.name}.',
+    ),
+    for (final event in social.visibleEvents.reversed)
+      _panel(
+        Icons.sos,
+        '${social.person(event.senderId).name} · ${event.status.name}',
+        '${event.createdAt.toLocal().toString().substring(0, 16)}\nSelected recipients: ${event.recipientIds.map((id) => social.person(id).name).join(', ')}\nLocal preview event — no internet delivery.',
+      ),
+    if (social.visibleEvents.isEmpty)
       _panel(
         Icons.history,
         'A fresh start',
         'Your completed or cancelled demo events will appear here.',
-      ),
-    for (final item in emergency.history)
-      _panel(
-        Icons.check_circle_outline,
-        item,
-        'Practice event • no notifications sent',
       ),
     const SizedBox(height: 16),
     const Text(
@@ -324,7 +501,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
     _panel(
       Icons.cloud_off_outlined,
       'Firebase not connected',
-      'Google sign-in, trusted contacts, push notifications and live location require project configuration.',
+      'Friends, chat and SOS routing currently work between local demo profiles. Real accounts, delivery and location will be implemented when Firebase is added.',
     ),
     _panel(
       Icons.videocam_off_outlined,
