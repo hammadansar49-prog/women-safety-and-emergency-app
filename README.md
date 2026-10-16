@@ -18,6 +18,14 @@ flutter run
 
 Use Explore demo on onboarding. Android requires a configured SDK/JDK and a connected phone or emulator.
 
+### Browser preview without installing the APK
+
+Double-click `preview.cmd`, keep its terminal open, and visit **http://localhost:8080** once Flutter reports that the app is being served. Alternatively run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/preview.ps1` from the project folder. To use another port, append `-Port 8081`.
+
+After code edits, press `r` in that terminal to reload or `R` to restart. Press `q` to stop. Reopen the launcher after restarting your computer. This previews the same Flutter UI; Android background services, hardware shortcuts and push delivery still require physical-device testing.
+
+Firebase-dependent functionality is not implemented yet; supplying credentials alone will not enable it. The next phases require both code and project configuration.
+
 ## Verification
 
 ```sh
