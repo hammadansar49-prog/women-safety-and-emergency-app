@@ -3,6 +3,8 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    // Firebase: processes google-services.json.
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -24,7 +26,8 @@ android {
         applicationId = "com.safeher.safeher"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // Firebase requires API 23+.
+        minSdk = maxOf(23, flutter.minSdkVersion)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -41,4 +44,12 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // MediaSession + VolumeProviderCompat: lets the background SOS trigger
+    // service receive hardware volume-key presses even when the screen is
+    // locked or SafeHer is not in the foreground.
+    implementation("androidx.media:media:1.7.0")
+    implementation("androidx.core:core-ktx:1.13.1")
 }

@@ -1,5 +1,7 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'emergency_controller.dart';
+import 'firebase_options.dart';
 import 'social_controller.dart';
 import 'contacts_screen.dart';
 import 'username_screen.dart';
@@ -9,6 +11,19 @@ import 'sos_shortcut.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Connect Firebase only where it is configured (Android for now). Other
+  // platforms keep running in local-only mode so nothing breaks before their
+  // Firebase apps are registered.
+  if (DefaultFirebaseOptions.hasPlatformOptions) {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    } catch (_) {
+      // A failed Firebase init must not block the app from opening; features
+      // that need the cloud will report their own errors.
+    }
+  }
   try {
     final social = await loadLocalAccount();
     try {
@@ -120,11 +135,14 @@ class _SafeHerShellState extends State<SafeHerShell> {
     shortcut = SosShortcut(
       selectedKey: social.shortcutKey,
       onSos: () {
-        if (mounted &&
-            onboarded &&
-            social.signedIn &&
-            emergency.status == EmergencyStatus.idle) {
+        if (!mounted || !onboarded || !social.signedIn) return;
+        if (emergency.status == EmergencyStatus.idle) {
           _startSos();
+        } else if (social.currentUserId == sosOwner) {
+          // Same gesture during an active/counting SOS is the hidden cancel.
+          // Nothing about this is shown on screen; the onboarding guide teaches
+          // the gesture instead.
+          _finishSos(cancelled: true);
         }
       },
     );

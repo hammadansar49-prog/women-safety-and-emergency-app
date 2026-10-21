@@ -3,14 +3,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 class SosShortcut extends ChangeNotifier {
-  SosShortcut({required this.onSos, required this.selectedKey}) {
-    if (supported) _channel.setMethodCallHandler(_receive);
+  SosShortcut({
+    required this.onSos,
+    required this.selectedKey,
+    this.backgroundPresses = 3,
+    this.backgroundWindowMs = 2000,
+  }) {
+    if (supported) {
+      _channel.setMethodCallHandler(_receive);
+      // A trigger may have arrived via the background service while the app
+      // was killed; drain it once the handler is wired.
+      _drainPendingTrigger();
+    }
   }
   final VoidCallback onSos;
   final _channel = const MethodChannel('safeher/shortcut');
   bool get supported =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
   String selectedKey;
+
+  /// How many rapid presses of [selectedKey] fire the background trigger.
+  /// A double press is easy to hit by accident while changing volume, so the
+  /// background pattern needs more presses than the in-app test.
+  final int backgroundPresses;
+  final int backgroundWindowMs;
+
   bool testing = false;
   bool tested = false;
   bool enabled = false;
@@ -18,6 +35,13 @@ class SosShortcut extends ChangeNotifier {
   bool _disposed = false;
 
   Future<void> _receive(MethodCall call) async {
+    // Fired by the foreground-service detector while the app is backgrounded
+    // or the phone is locked. The app decides start-vs-cancel from SOS state,
+    // so the hidden cancel gesture is never surfaced here.
+    if (call.method == 'backgroundSos') {
+      if (enabled) onSos();
+      return;
+    }
     if (call.method != 'doublePress' || call.arguments != selectedKey) return;
     if (testing) {
       testing = false;
@@ -26,6 +50,33 @@ class SosShortcut extends ChangeNotifier {
       if (!_disposed) notifyListeners();
     } else if (enabled) {
       onSos();
+    }
+  }
+
+  Future<void> _drainPendingTrigger() async {
+    try {
+      final had = await _channel.invokeMethod<bool>('consumePendingTrigger');
+      if (had == true && !_disposed) onSos();
+    } catch (_) {
+      // Older builds without the method: ignore.
+    }
+  }
+
+  Future<void> _armBackground(bool on) async {
+    if (!supported) return;
+    try {
+      if (on) {
+        await _channel.invokeMethod('startBackgroundArm', {
+          'key': selectedKey,
+          'presses': backgroundPresses,
+          'windowMs': backgroundWindowMs,
+        });
+      } else {
+        await _channel.invokeMethod('stopBackgroundArm');
+      }
+    } catch (_) {
+      // Surface through `error`; foreground detection still works.
+      error = 'Background SOS service could not start on this device.';
     }
   }
 
@@ -51,6 +102,7 @@ class SosShortcut extends ChangeNotifier {
     tested = false;
     selectedKey = key;
     await _configure('off');
+    await _armBackground(false);
     if (!_disposed) notifyListeners();
   }
 
@@ -66,6 +118,9 @@ class SosShortcut extends ChangeNotifier {
     enabled = supported && tested && value;
     testing = false;
     await _configure(enabled ? 'armed' : 'off');
+    // Mirror the state into the background service so the shortcut also works
+    // while SafeHer is backgrounded or the phone is locked.
+    await _armBackground(enabled);
     if (!_disposed) notifyListeners();
   }
 
@@ -75,6 +130,7 @@ class SosShortcut extends ChangeNotifier {
     if (supported) {
       _channel.setMethodCallHandler(null);
       _configure('off');
+      _armBackground(false);
     }
     super.dispose();
   }
@@ -124,8 +180,10 @@ class ShortcutSettings extends StatelessWidget {
               },
             ),
             const SizedBox(height: 12),
-            const Text(
-              'Works only while SafeHer is open and the phone is unlocked. Starts your SOS countdown. Power-button combinations and background activation are not supported.',
+            Text(
+              'In the app: double-press ${shortcut.selectedKey == 'volumeUp' ? 'Volume Up' : 'Volume Down'} to start your SOS. '
+              'When enabled, a background service also watches for ${shortcut.backgroundPresses} quick presses so SOS can start while the phone is locked or SafeHer is in your pocket. '
+              'The same presses quietly stop an active SOS. Power-button combinations are not supported by Android.',
             ),
             if (!shortcut.supported)
               const Padding(
