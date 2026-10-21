@@ -58,6 +58,10 @@ class _AuroraBackgroundState extends State<AuroraBackground>
 
   @override
   Widget build(BuildContext context) {
+    // The baby pink design is a flat cream page; the header carries the orbs.
+    if (AppColors.light) {
+      return ColoredBox(color: AppColors.bg, child: widget.child);
+    }
     return DecoratedBox(
       decoration: BoxDecoration(color: AppColors.bg),
       child: Stack(
@@ -66,9 +70,8 @@ class _AuroraBackgroundState extends State<AuroraBackground>
             child: RepaintBoundary(
               child: AnimatedBuilder(
                 animation: _controller,
-                builder: (context, _) => CustomPaint(
-                  painter: _AuroraPainter(_controller.value),
-                ),
+                builder: (context, _) =>
+                    CustomPaint(painter: _AuroraPainter(_controller.value)),
               ),
             ),
           ),

@@ -11,6 +11,8 @@ import 'tokens.dart';
 class AppTheme {
   const AppTheme._();
 
+  static const _field = BorderRadius.all(Radius.circular(18));
+
   static ThemeData build() {
     final scheme = ColorScheme(
       brightness: AppColors.light ? Brightness.light : Brightness.dark,
@@ -30,61 +32,64 @@ class AppTheme {
       outlineVariant: AppColors.border,
     );
 
-    final body = GoogleFonts.interTextTheme(
+    final body = GoogleFonts.plusJakartaSansTextTheme(
       (AppColors.light ? ThemeData.light() : ThemeData.dark()).textTheme,
     );
     final text = body.copyWith(
       // Display + headline use Space Grotesk with tight tracking; the tracking
       // is what keeps a geometric face from reading loose at large sizes.
-      displayLarge: GoogleFonts.spaceGrotesk(
+      displayLarge: GoogleFonts.fraunces(
         fontSize: 52,
         fontWeight: FontWeight.w700,
-        letterSpacing: -1.5,
+        letterSpacing: -0.8,
         height: 1.05,
         color: AppColors.text,
       ),
-      displayMedium: GoogleFonts.spaceGrotesk(
+      displayMedium: GoogleFonts.fraunces(
         fontSize: 40,
         fontWeight: FontWeight.w700,
-        letterSpacing: -1.2,
+        letterSpacing: -0.6,
         height: 1.1,
         color: AppColors.text,
       ),
-      headlineLarge: GoogleFonts.spaceGrotesk(
+      headlineLarge: GoogleFonts.fraunces(
         fontSize: 30,
         fontWeight: FontWeight.w700,
-        letterSpacing: -0.8,
+        letterSpacing: -0.4,
         color: AppColors.text,
       ),
-      headlineMedium: GoogleFonts.spaceGrotesk(
+      headlineMedium: GoogleFonts.fraunces(
         fontSize: 24,
-        fontWeight: FontWeight.w600,
-        letterSpacing: -0.6,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.3,
         color: AppColors.text,
       ),
-      titleLarge: GoogleFonts.spaceGrotesk(
+      titleLarge: GoogleFonts.fraunces(
         fontSize: 19,
         fontWeight: FontWeight.w600,
         letterSpacing: -0.4,
         color: AppColors.text,
       ),
-      titleMedium: GoogleFonts.inter(
+      titleMedium: GoogleFonts.plusJakartaSans(
         fontSize: 16,
         fontWeight: FontWeight.w600,
         color: AppColors.text,
       ),
-      bodyLarge: GoogleFonts.inter(
+      bodyLarge: GoogleFonts.plusJakartaSans(
         fontSize: 15.5,
         height: 1.5,
         color: AppColors.text,
       ),
-      bodyMedium: GoogleFonts.inter(
+      bodyMedium: GoogleFonts.plusJakartaSans(
         fontSize: 14.5,
         height: 1.5,
         color: AppColors.textMuted,
       ),
-      bodySmall: GoogleFonts.inter(fontSize: 13, color: AppColors.textMuted),
-      labelLarge: GoogleFonts.inter(
+      bodySmall: GoogleFonts.plusJakartaSans(
+        fontSize: 13,
+        color: AppColors.textMuted,
+      ),
+      labelLarge: GoogleFonts.plusJakartaSans(
         fontSize: 15,
         fontWeight: FontWeight.w600,
         letterSpacing: 0.1,
@@ -101,7 +106,7 @@ class AppTheme {
       // deep ink ground the aurora sits on.
       scaffoldBackgroundColor: AppColors.bg,
       canvasColor: AppColors.bg,
-      splashFactory: InkSparkle.splashFactory,
+      splashFactory: InkRipple.splashFactory,
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
@@ -129,11 +134,12 @@ class AppTheme {
           backgroundColor: AppColors.primary,
           foregroundColor: AppColors.onPrimary,
           textStyle: text.labelLarge,
+          minimumSize: const Size(0, 56),
           padding: const EdgeInsets.symmetric(
             horizontal: Space.x6,
             vertical: Space.x4,
           ),
-          shape: const RoundedRectangleBorder(borderRadius: Radii.brSm),
+          shape: const StadiumBorder(),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -147,11 +153,12 @@ class AppTheme {
           foregroundColor: AppColors.text,
           side: BorderSide(color: AppColors.border),
           textStyle: text.labelLarge,
+          minimumSize: const Size(0, 56),
           padding: const EdgeInsets.symmetric(
             horizontal: Space.x6,
             vertical: Space.x4,
           ),
-          shape: const RoundedRectangleBorder(borderRadius: Radii.brSm),
+          shape: const StadiumBorder(),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -164,23 +171,54 @@ class AppTheme {
           vertical: Space.x4,
         ),
         border: OutlineInputBorder(
-          borderRadius: Radii.brSm,
+          borderRadius: _field,
           borderSide: BorderSide(color: AppColors.border),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: Radii.brSm,
+          borderRadius: _field,
           borderSide: BorderSide(color: AppColors.border),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: Radii.brSm,
+          borderRadius: _field,
           borderSide: BorderSide(color: AppColors.accent, width: 1.6),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: AppColors.secondary,
-        contentTextStyle: text.bodyLarge,
+        backgroundColor: AppColors.light
+            ? const Color(0xFF35162B)
+            : AppColors.secondary,
+        contentTextStyle: text.bodyLarge?.copyWith(
+          color: AppColors.light ? const Color(0xFFFFF7F3) : AppColors.text,
+          fontWeight: FontWeight.w600,
+          fontSize: 13.5,
+        ),
         behavior: SnackBarBehavior.floating,
-        shape: const RoundedRectangleBorder(borderRadius: Radii.brSm),
+        shape: const StadiumBorder(),
+        insetPadding: const EdgeInsets.fromLTRB(24, 0, 24, 104),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 8,
+        shadowColor: const Color(0x33000000),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: AppColors.border),
+        ),
+        textStyle: text.labelLarge,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.bg,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        titleTextStyle: text.headlineMedium,
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: AppColors.bg,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(36)),
+        ),
       ),
       listTileTheme: ListTileThemeData(
         iconColor: AppColors.accent,
@@ -218,18 +256,7 @@ class _FadeThroughTransitionBuilder extends PageTransitionsBuilder {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     final fade = CurvedAnimation(parent: animation, curve: Motion.enter);
-    if (reduceMotion) return FadeTransition(opacity: fade, child: child);
-    return FadeTransition(
-      opacity: fade,
-      child: SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, 0.035),
-          end: Offset.zero,
-        ).animate(fade),
-        child: child,
-      ),
-    );
+    return FadeTransition(opacity: fade, child: child);
   }
 }

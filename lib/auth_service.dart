@@ -69,22 +69,22 @@ class FirebaseAuthService implements AuthService {
   DocumentReference<Map<String, dynamic>> _name(String u) =>
       _db.collection('usernames').doc(u);
 
-  Future<void> _reserve(User user, String username) => _db.runTransaction((
-    tx,
-  ) async {
-    final taken = await tx.get(_name(username));
-    if (taken.exists) throw const AuthFailure('That username is already taken.');
-    tx.set(_name(username), {
-      'uid': user.uid,
-      'email': user.email,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-    tx.set(_db.collection('users').doc(user.uid), {'username': username});
-    tx.set(_db.collection('profiles').doc(username), {
-      'uid': user.uid,
-      'username': username,
-    });
-  });
+  Future<void> _reserve(User user, String username) =>
+      _db.runTransaction((tx) async {
+        final taken = await tx.get(_name(username));
+        if (taken.exists)
+          throw const AuthFailure('That username is already taken.');
+        tx.set(_name(username), {
+          'uid': user.uid,
+          'email': user.email,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        tx.set(_db.collection('users').doc(user.uid), {'username': username});
+        tx.set(_db.collection('profiles').doc(username), {
+          'uid': user.uid,
+          'username': username,
+        });
+      });
 
   /// Accounts made before the searchable directory existed get an entry the
   /// next time they sign in. Best effort: a failure must not block sign-in.

@@ -150,7 +150,7 @@ class _EntranceFadeState extends State<EntranceFade>
       return;
     }
     // Cap the stagger so a long list never leaves the last row waiting.
-    final delay = Motion.stagger * widget.index.clamp(0, 10);
+    final delay = Motion.stagger * widget.index.clamp(0, 6);
     Future<void>.delayed(delay, () {
       if (mounted) _controller.forward();
     });

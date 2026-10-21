@@ -9,32 +9,57 @@ import 'package:flutter/widgets.dart';
 class AppColors {
   const AppColors._();
 
-  // Generated palette: premium / dark / analogous (seed 23), violet -> magenta.
-  static Color get text => light ? const Color(0xFF17181F) : const Color(0xFFEFF1FE);
-  static Color get bg => light ? const Color(0xFFF5F3FA) : const Color(0xFF0B0C11);
-  static Color get surface => light ? const Color(0xFFFFFFFF) : const Color(0xFF16171D);
-  static Color get primary => light ? const Color(0xFF5558A6) : const Color(0xFF6C6FB7);
+  // Light = the locked "G" baby-pink design; dark keeps the original aurora
+  // palette. Every value resolves against [light].
+  static Color get text =>
+      light ? const Color(0xFF35162B) : const Color(0xFFEFF1FE);
+  static Color get bg =>
+      light ? const Color(0xFFFFF7F3) : const Color(0xFF0B0C11);
+  static Color get surface =>
+      light ? const Color(0xFFFFFDFB) : const Color(0xFF16171D);
+  static Color get primary =>
+      light ? const Color(0xFFC2255C) : const Color(0xFF6C6FB7);
   static const onPrimary = Color(0xFFFFFFFF);
 
   /// Which palette is live. Set from the appearance setting before the theme
   /// is built; every colour below resolves against it.
   static bool light = false;
-  static Color get secondary => light ? const Color(0xFFE7E3F2) : const Color(0xFF2A2C41);
-  static Color get accent => light ? const Color(0xFF8A55AC) : const Color(0xFFB68AD0);
-  static Color get border => light ? const Color(0xFFDAD6E6) : const Color(0xFF222229);
+  static Color get secondary =>
+      light ? const Color(0xFFFADCE4) : const Color(0xFF2A2C41);
+  static Color get accent =>
+      light ? const Color(0xFFB01E52) : const Color(0xFFB68AD0);
+  static Color get border =>
+      light ? const Color(0xFFEBCFD6) : const Color(0xFF222229);
 
-  /// Reserved exclusively for the active-SOS state. Never used as a generic
-  /// accent — an emergency has to look unlike anything else in the product.
-  /// 6.08:1 on [bg]. White labels on this fill are UI-safe only (3.21:1), so
-  /// they are permitted at large bold sizes and nowhere else.
-  static Color get danger => light ? const Color(0xFFD61F49) : const Color(0xFFFF4D6D);
+  /// Reserved exclusively for the active-SOS state.
+  static Color get danger =>
+      light ? const Color(0xFFD61F49) : const Color(0xFFFF4D6D);
 
-  /// Muted body text. Derived from [text], kept here so the dimmed tone is one
-  /// value instead of a dozen hand-picked opacities.
-  static Color get textMuted => light ? const Color(0xFF5A5E73) : const Color(0xFF9BA0B8);
+  /// Muted body text.
+  static Color get textMuted =>
+      light ? const Color(0xFF6A3A52) : const Color(0xFF9BA0B8);
 
-  /// Hairline that makes a glass panel read as glass: ~12% white.
-  static Color get glassHairline => light ? const Color(0x1F000000) : const Color(0x1FFFFFFF);
+  /// Hairline that makes a panel read as an edge.
+  static Color get glassHairline =>
+      light ? const Color(0xFFEBCFD6) : const Color(0x1FFFFFFF);
+
+  /// The blush page header and its two drifting orbs.
+  static Color get header =>
+      light ? const Color(0xFFFADCE4) : const Color(0xFF1B1727);
+  static Color get orbPeach =>
+      light ? const Color(0xFFFFC9B8) : const Color(0xFF3B2233);
+  static Color get orbLavender =>
+      light ? const Color(0xFFEBD3F2) : const Color(0xFF2A2547);
+
+  /// Soft tinted fill used for secondary cards and chips.
+  static Color get tint =>
+      light ? const Color(0xFFFCE9EE) : const Color(0xFF1F2030);
+
+  /// Text/icons on the active nav pill and on [header] accents.
+  static Color get onHeader =>
+      light ? const Color(0xFF8A1F4B) : const Color(0xFFEFF1FE);
+  static Color get success =>
+      light ? const Color(0xFF2F8F5B) : const Color(0xFF4CC38A);
 }
 
 /// 4px base spacing scale. Named steps with roles, not arbitrary numbers.
@@ -56,6 +81,7 @@ class Radii {
   static const sm = 12.0;
   static const md = 20.0;
   static const lg = 28.0;
+  static const header = 44.0;
 
   static const brSm = BorderRadius.all(Radius.circular(sm));
   static const brMd = BorderRadius.all(Radius.circular(md));
@@ -69,8 +95,8 @@ class Motion {
 
   static const micro = Duration(milliseconds: 120); // press, hover
   static const standard = Duration(milliseconds: 220); // state change
-  static const entrance = Duration(milliseconds: 320); // first appearance
-  static const page = Duration(milliseconds: 360); // route transition
+  static const entrance = Duration(milliseconds: 240); // first appearance
+  static const page = Duration(milliseconds: 160); // route transition
   static const aurora = Duration(seconds: 12); // ambient background loop
   static const pulse = Duration(milliseconds: 1400); // active SOS heartbeat
 
@@ -83,5 +109,5 @@ class Motion {
   static const spring = Curves.easeOutBack;
 
   /// Stagger step for list entrances.
-  static const stagger = Duration(milliseconds: 45);
+  static const stagger = Duration(milliseconds: 25);
 }

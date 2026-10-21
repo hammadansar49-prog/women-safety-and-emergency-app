@@ -1,19 +1,14 @@
 import 'package:flutter/material.dart';
 
 import 'theme/tokens.dart';
-import 'ui/glass.dart';
+import 'ui/design.dart';
 import 'ui/motion.dart';
 
-/// Sign-in and sign-up surfaces, styled to the aurora-glass system.
-///
-/// These collect the inputs and drive navigation; the actual authentication
-/// (email/password + Google) is wired to Firebase Auth in a later step. For
-/// now the shell "signs in" against local data, so the flow is real even
-/// though the identity check is not yet.
+/// Sign-in and sign-up, in the baby pink design: a blush header carrying the
+/// wordmark and headline, with the form rising over its bottom edge.
 
-/// A glass-backed text field with a leading icon and an optional reveal toggle.
-class _GlassField extends StatefulWidget {
-  const _GlassField({
+class _Field extends StatelessWidget {
+  const _Field({
     required this.controller,
     required this.label,
     required this.icon,
@@ -22,8 +17,10 @@ class _GlassField extends StatefulWidget {
     this.prefixText,
     this.textInputAction,
     this.onSubmitted,
+    this.shadow = false,
   });
 
+  final bool shadow;
   final TextEditingController controller;
   final String label;
   final IconData icon;
@@ -34,189 +31,50 @@ class _GlassField extends StatefulWidget {
   final ValueChanged<String>? onSubmitted;
 
   @override
-  State<_GlassField> createState() => _GlassFieldState();
-}
-
-class _GlassFieldState extends State<_GlassField> {
-  late bool _hidden = widget.obscure;
-
-  @override
-  Widget build(BuildContext context) {
-    return GlassPanel(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Space.x4,
-        vertical: Space.x1,
-      ),
-      borderRadius: Radii.brSm,
-      opacity: 0.5,
-      child: TextField(
-        controller: widget.controller,
-        obscureText: _hidden,
-        keyboardType: widget.keyboardType,
-        textInputAction: widget.textInputAction,
-        autocorrect: false,
-        enableSuggestions: false,
-        onSubmitted: widget.onSubmitted,
-        style: Theme.of(context).textTheme.bodyLarge,
-        decoration: InputDecoration(
-          labelText: widget.label,
-          prefixText: widget.prefixText,
-          prefixIcon: Icon(widget.icon, color: AppColors.accent, size: 20),
-          filled: false,
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
-          suffixIcon: widget.obscure
-              ? IconButton(
-                  icon: Icon(
-                    _hidden
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined,
-                    color: AppColors.textMuted,
-                    size: 20,
-                  ),
-                  onPressed: () => setState(() => _hidden = !_hidden),
-                )
-              : null,
-        ),
-      ),
-    );
-  }
-}
-
-/// The gradient primary action used across auth.
-class _PrimaryButton extends StatelessWidget {
-  const _PrimaryButton({required this.label, required this.onTap});
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Pressable(
-    borderRadius: Radii.brSm,
-    glow: AppColors.accent,
-    onTap: onTap,
-    semanticLabel: label,
-    child: Container(
-      padding: const EdgeInsets.symmetric(vertical: Space.x4 + 2),
-      decoration: BoxDecoration(
-        borderRadius: Radii.brSm,
-        gradient: LinearGradient(
-          colors: [AppColors.accent, AppColors.primary],
-        ),
-        border: Border.all(color: AppColors.glassHairline),
-      ),
-      child: Text(
-        label,
-        textAlign: TextAlign.center,
-        style: Theme.of(
-          context,
-        ).textTheme.labelLarge?.copyWith(color: Colors.white, fontSize: 16),
-      ),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 14),
+    child: DesignField(
+      controller: controller,
+      hint: label,
+      icon: icon,
+      obscure: obscure,
+      keyboardType: keyboardType,
+      prefixText: prefixText,
+      textInputAction: textInputAction,
+      onSubmitted: onSubmitted,
+      shadow: shadow,
     ),
   );
 }
 
-/// "Continue with Google" — a glass pill with the Google "G" wordmark glyph.
 class _GoogleButton extends StatelessWidget {
   const _GoogleButton({required this.onTap});
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Pressable(
-    borderRadius: Radii.brSm,
+  Widget build(BuildContext context) => OutlinedPill(
+    label: 'Continue with Google',
     onTap: onTap,
-    semanticLabel: 'Continue with Google',
-    child: GlassPanel(
-      borderRadius: Radii.brSm,
-      opacity: 0.5,
-      padding: const EdgeInsets.symmetric(vertical: Space.x4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const _GoogleGlyph(),
-          const SizedBox(width: Space.x3),
-          Text(
-            'Continue with Google',
-            style: Theme.of(context).textTheme.labelLarge,
-          ),
-        ],
+    leading: Container(
+      width: 26,
+      height: 26,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppColors.secondary,
       ),
-    ),
-  );
-}
-
-/// A small, recognisable multi-colour Google "G" drawn from text, so no
-/// external logo asset is needed.
-class _GoogleGlyph extends StatelessWidget {
-  const _GoogleGlyph();
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 24,
-    height: 24,
-    alignment: Alignment.center,
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(6),
-    ),
-    child: const Text(
-      'G',
-      style: TextStyle(
-        fontWeight: FontWeight.w700,
-        fontSize: 16,
-        color: Color(0xFF4285F4),
-      ),
-    ),
-  );
-}
-
-Widget _authHeader(BuildContext context, String title, String subtitle) {
-  final theme = Theme.of(context);
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.center,
-    children: [
-      Container(
-        width: 64,
-        height: 64,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(
-            colors: [
-              AppColors.primary.withValues(alpha: 0.35),
-              AppColors.primary.withValues(alpha: 0.0),
-            ],
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.accent.withValues(alpha: 0.28),
-              blurRadius: 32,
-              spreadRadius: 2,
-            ),
-          ],
-        ),
-        child: Icon(
-          Icons.shield_rounded,
-          size: 36,
+      child: Text(
+        'G',
+        style: TextStyle(
+          fontWeight: FontWeight.w800,
+          fontSize: 14,
           color: AppColors.accent,
         ),
       ),
-      const SizedBox(height: Space.x6),
-      Text(
-        title,
-        textAlign: TextAlign.center,
-        style: theme.textTheme.headlineLarge,
-      ),
-      const SizedBox(height: Space.x2),
-      Text(
-        subtitle,
-        textAlign: TextAlign.center,
-        style: theme.textTheme.bodyMedium,
-      ),
-    ],
+    ),
   );
 }
 
-/// A thin "or" divider between the primary form and the social option.
 Widget _orDivider(BuildContext context) => Row(
   children: [
     Expanded(child: Divider(color: AppColors.border)),
@@ -228,28 +86,69 @@ Widget _orDivider(BuildContext context) => Row(
   ],
 );
 
-Widget _authShell(BuildContext context, List<Widget> children) => Scaffold(
-  backgroundColor: Colors.transparent,
-  body: SafeArea(
-    child: Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(
-          horizontal: Space.x6,
-          vertical: Space.x8,
-        ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 460),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: children,
-          ),
+Widget _centerHeader(BuildContext context, String title, String subtitle) {
+  final theme = Theme.of(context);
+  return Column(
+    children: [
+      const Wordmark(),
+      const SizedBox(height: 26),
+      Text(
+        title,
+        textAlign: TextAlign.center,
+        style: theme.textTheme.headlineLarge?.copyWith(fontSize: 34),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        subtitle,
+        textAlign: TextAlign.center,
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: AppColors.light
+              ? const Color(0xFF6A3A52)
+              : AppColors.textMuted,
         ),
       ),
-    ),
+    ],
+  );
+}
+
+Widget _errorText(BuildContext context, String message) => Padding(
+  padding: const EdgeInsets.only(bottom: Space.x3),
+  child: Text(
+    message,
+    style: Theme.of(
+      context,
+    ).textTheme.bodyMedium?.copyWith(color: AppColors.danger),
   ),
 );
 
-/// Sign-in: username + password, forgot-password, create-account, and Google.
+Widget _footer(
+  BuildContext context,
+  String text,
+  String action,
+  VoidCallback onTap,
+) => Padding(
+  padding: EdgeInsets.zero,
+  child: Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      Text(text, style: Theme.of(context).textTheme.bodyMedium),
+      const SizedBox(width: 6),
+      GestureDetector(
+        onTap: onTap,
+        child: Text(
+          action,
+          style: TextStyle(
+            color: AppColors.accent,
+            fontWeight: FontWeight.w700,
+            fontSize: 14.5,
+          ),
+        ),
+      ),
+    ],
+  ),
+);
+
+/// Sign-in: username or email + password, forgot-password, create-account, Google.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({
     super.key,
@@ -305,24 +204,27 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return _authShell(context, [
-      EntranceFade(child: _authHeader(context, 'Welcome back', 'Sign in to your SafeHer circle.')),
-      const SizedBox(height: Space.x8),
-      EntranceFade(
-        index: 1,
-        child: _GlassField(
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: Colors.transparent,
+    resizeToAvoidBottomInset: false,
+    body: HeaderPage(
+      headerHeight: 270,
+      overlap: 20,
+      bottomPadding: 40,
+      header: _centerHeader(
+        context,
+        'Welcome back.',
+        'Sign in to keep your circle close.',
+      ),
+      children: [
+        _Field(
+          shadow: true,
           controller: _username,
           label: 'Username or email',
           icon: Icons.person_outline,
           textInputAction: TextInputAction.next,
         ),
-      ),
-      const SizedBox(height: Space.x3),
-      EntranceFade(
-        index: 2,
-        child: _GlassField(
+        _Field(
           controller: _password,
           label: 'Password',
           icon: Icons.lock_outline,
@@ -330,56 +232,50 @@ class _LoginScreenState extends State<LoginScreen> {
           textInputAction: TextInputAction.done,
           onSubmitted: (_) => _submit(),
         ),
-      ),
-      Align(
-        alignment: Alignment.centerRight,
-        child: TextButton(
-          onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Password reset arrives with cloud sign-in.'),
+        Align(
+          alignment: Alignment.centerRight,
+          child: GestureDetector(
+            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Password reset arrives with cloud sign-in.'),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Text(
+                'Forgot password?',
+                style: TextStyle(
+                  color: AppColors.accent,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
             ),
           ),
-          child: const Text('Forgot password?'),
         ),
-      ),
-      if (_error != null)
-        Padding(
-          padding: const EdgeInsets.only(bottom: Space.x3),
-          child: Text(
-            _error!,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: AppColors.danger,
-            ),
-          ),
-        ),
-      const SizedBox(height: Space.x2),
-      EntranceFade(index: 3, child: _PrimaryButton(
+        if (_error != null) _errorText(context, _error!),
+        const SizedBox(height: 6),
+        BerryButton(
           label: _busy ? 'Signing in…' : 'Sign in',
+          busy: _busy,
           onTap: _submit,
-        )),
-      const SizedBox(height: Space.x6),
-      EntranceFade(index: 4, child: _orDivider(context)),
-      const SizedBox(height: Space.x6),
-      EntranceFade(index: 5, child: _GoogleButton(onTap: () => _run(widget.onGoogle))),
-      const SizedBox(height: Space.x6),
-      EntranceFade(
-        index: 6,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text("New here?", style: theme.textTheme.bodyMedium),
-            TextButton(
-              onPressed: widget.onCreateAccount,
-              child: const Text('Create an account'),
-            ),
-          ],
         ),
+        const SizedBox(height: 18),
+        _orDivider(context),
+        const SizedBox(height: 18),
+        _GoogleButton(onTap: () => _run(widget.onGoogle)),
+      ],
+      footer: _footer(
+        context,
+        'New to SafeHer?',
+        'Create account',
+        widget.onCreateAccount,
       ),
-    ]);
-  }
+    ),
+  );
 }
 
-/// Sign-up: register with email (then username + password), or Google.
+/// Sign-up: email, username and password, or Google.
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({
     super.key,
@@ -388,11 +284,7 @@ class RegisterScreen extends StatefulWidget {
     required this.onBackToLogin,
   });
 
-  final Future<String?> Function(
-    String email,
-    String username,
-    String password,
-  )
+  final Future<String?> Function(String email, String username, String password)
   onRegister;
   final Future<String?> Function() onGoogle;
   final VoidCallback onBackToLogin;
@@ -450,80 +342,123 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return _authShell(context, [
-      Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton.icon(
-          onPressed: widget.onBackToLogin,
-          icon: const Icon(Icons.arrow_back, size: 18),
-          label: const Text('Back'),
-        ),
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: Colors.transparent,
+    resizeToAvoidBottomInset: false,
+    body: HeaderPage(
+      headerHeight: 232,
+      overlap: 20,
+      bottomPadding: 40,
+      header: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Wordmark(),
+              const Spacer(),
+              HeaderBackIcon(onTap: widget.onBackToLogin),
+            ],
+          ),
+          const SizedBox(height: 18),
+          const HeaderTitle(
+            'Create your account.',
+            subtitle: 'It takes under a minute.',
+            size: 32,
+          ),
+        ],
       ),
-      EntranceFade(
-        child: _authHeader(
-          context,
-          'Create your account',
-          'Join with your email, then pick a username.',
-        ),
-      ),
-      const SizedBox(height: Space.x8),
-      EntranceFade(
-        index: 1,
-        child: _GlassField(
+      children: [
+        _Field(
           controller: _email,
           label: 'Email',
           icon: Icons.mail_outline,
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.next,
         ),
-      ),
-      const SizedBox(height: Space.x3),
-      EntranceFade(
-        index: 2,
-        child: _GlassField(
+        _Field(
           controller: _username,
           label: 'Username',
           icon: Icons.alternate_email,
-          prefixText: '@',
           textInputAction: TextInputAction.next,
         ),
-      ),
-      const SizedBox(height: Space.x3),
-      EntranceFade(
-        index: 3,
-        child: _GlassField(
+        _Field(
           controller: _password,
-          label: 'Password',
+          label: 'Password (6+ characters)',
           icon: Icons.lock_outline,
           obscure: true,
           textInputAction: TextInputAction.done,
           onSubmitted: (_) => _submit(),
         ),
-      ),
-      if (_error != null)
         Padding(
-          padding: const EdgeInsets.only(top: Space.x3),
-          child: Text(
-            _error!,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: AppColors.danger,
-            ),
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 20,
+                height: 20,
+                margin: const EdgeInsets.only(top: 1),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(6),
+                  color: AppColors.primary,
+                ),
+                child: const Icon(
+                  Icons.check_rounded,
+                  color: Colors.white,
+                  size: 15,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'I understand SafeHer shares my location only when I start an SOS.',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(fontSize: 12.5, height: 1.5),
+                ),
+              ),
+            ],
           ),
         ),
-      const SizedBox(height: Space.x6),
-      EntranceFade(
-        index: 4,
-        child: _PrimaryButton(
+        if (_error != null) _errorText(context, _error!),
+        BerryButton(
           label: _busy ? 'Creating…' : 'Create account',
+          busy: _busy,
           onTap: _submit,
         ),
+        const SizedBox(height: 18),
+        _orDivider(context),
+        const SizedBox(height: 18),
+        _GoogleButton(onTap: () => _run(widget.onGoogle)),
+      ],
+      footer: _footer(
+        context,
+        'Already have an account?',
+        'Sign in',
+        widget.onBackToLogin,
       ),
-      const SizedBox(height: Space.x6),
-      EntranceFade(index: 5, child: _orDivider(context)),
-      const SizedBox(height: Space.x6),
-      EntranceFade(index: 6, child: _GoogleButton(onTap: () => _run(widget.onGoogle))),
-    ]);
-  }
+    ),
+  );
+}
+
+/// Small close/back icon for the register header (no navigator route here).
+class HeaderBackIcon extends StatelessWidget {
+  const HeaderBackIcon({super.key, required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Pressable(
+    borderRadius: BorderRadius.circular(999),
+    onTap: onTap,
+    semanticLabel: 'Back to sign in',
+    child: Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppColors.light ? Colors.white : AppColors.surface,
+      ),
+      child: Icon(Icons.arrow_back_rounded, color: AppColors.text, size: 20),
+    ),
+  );
 }

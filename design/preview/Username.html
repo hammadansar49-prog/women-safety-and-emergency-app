@@ -1,0 +1,49 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=390">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif}
+.mark{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:26px;line-height:1;letter-spacing:-0.04em;color:#35162B}
+.mark i{font-style:normal;color:#B01E52}
+.in{height:58px;border:1.5px solid #C2255C;background:#FFFDFB;border-radius:18px;padding:0 16px;display:flex;align-items:center;gap:8px;box-sizing:border-box}
+.in input{flex:1;min-width:0;border:0;background:transparent;font:600 16px 'Plus Jakarta Sans',sans-serif;color:#35162B;outline:0}
+.btn{height:56px;border-radius:999px;background:#C2255C;color:#fff;font:800 16px 'Plus Jakarta Sans',sans-serif;display:flex;align-items:center;justify-content:center;border:0;width:100%}
+
+@keyframes riseIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes dropIn{from{opacity:0;transform:translateY(-22px)}to{opacity:1;transform:none}}
+@keyframes drift{from{transform:translate(0,0)}to{transform:translate(-10px,12px)}}
+@keyframes popIn{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:none}}
+.hdr{animation:dropIn 0.7s cubic-bezier(0.2,0.9,0.25,1) backwards}
+.orb{animation:drift 7s ease-in-out infinite alternate}
+.stag>*{animation:riseIn 0.65s cubic-bezier(0.2,0.9,0.25,1) backwards}
+.stag>*:nth-child(1){animation-delay:0.12s}.stag>*:nth-child(2){animation-delay:0.19s}.stag>*:nth-child(3){animation-delay:0.26s}.stag>*:nth-child(4){animation-delay:0.33s}.stag>*:nth-child(5){animation-delay:0.40s}.stag>*:nth-child(6){animation-delay:0.47s}.stag>*:nth-child(7){animation-delay:0.54s}.stag>*:nth-child(8){animation-delay:0.61s}.stag>*:nth-child(9){animation-delay:0.68s}.stag>*:nth-child(10){animation-delay:0.75s}
+.nav{animation:riseIn 0.7s cubic-bezier(0.2,0.9,0.25,1) 0.3s backwards}
+.nv{color:inherit;text-decoration:none;transition:transform 0.2s ease,background-color 0.3s ease,color 0.3s ease}
+.nv:hover{transform:translateY(-2px)}
+.nv:active{transform:scale(0.92)}
+.row,.item,.st,.cb,.pill,.chip,.btn,.btn2,.seg{transition:transform 0.25s cubic-bezier(0.2,0.9,0.25,1),box-shadow 0.25s ease,filter 0.25s ease,background-color 0.25s ease}
+.row:hover,.item:hover,.st:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(46,20,38,0.10)}
+.row:active,.item:active,.st:active,.cb:active,.pill:active,.chip:active,.seg:active{transform:scale(0.97)}
+.btn:hover,.btn2:hover{transform:translateY(-1px);filter:brightness(1.05)}
+.btn:active,.btn2:active{transform:scale(0.97)}
+.cb:hover{transform:scale(1.06)}
+.in{transition:border-color 0.25s ease,box-shadow 0.25s ease}
+.in:focus-within{border-color:#C2255C;box-shadow:0 0 0 4px rgba(194,37,92,0.14)}
+a{color:inherit;text-decoration:none}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0.01ms !important;animation-delay:0s !important;transition-duration:0.01ms !important}}
+</style>
+<body style="margin:0;background:#fff">
+
+<div style="width:390px;height:844px;box-sizing:border-box;position:relative;overflow:hidden;background:#FFF7F3;color:#35162B">
+<div class="hdr" style="height:270px;background:#FADCE4;border-radius:0 0 44px 44px;position:relative;z-index:0;overflow:hidden;padding:60px 24px 0;box-sizing:border-box"><div class="orb" style="position:absolute;right:-70px;top:-40px;width:220px;height:220px;border-radius:50%;background:#FFC9B8;opacity:0.7;z-index:-1"></div><div class="orb" style="position:absolute;right:50px;bottom:40px;width:70px;height:70px;border-radius:50%;background:#EBD3F2;opacity:0.8;z-index:-1"></div>
+<span class="mark">Safe<i>Her</i></span>
+<div style="margin-top:22px;font-size:12px;font-weight:700;letter-spacing:0.08em;color:#8A1F4B">STEP 2 OF 2</div>
+<h1 style="font-family:'Fraunces',serif;font-weight:700;font-size:34px;line-height:1.1;letter-spacing:-0.02em;margin:8px 0 0">Pick your username.</h1>
+<p style="margin:10px 0 0;font-size:14px;line-height:1.5;color:#6A3A52;max-width:290px">Buddies find you by it. It is unique and cannot be reused later.</p>
+</div>
+<div class="stag" style="position:absolute;left:22px;right:22px;top:252px;display:flex;flex-direction:column;gap:12px">
+<label class="in" style="box-shadow:0 8px 20px rgba(46,20,38,0.08)"><span style="font-weight:700;color:#B01E52;font-size:16px">@</span><input type="text" value="hammad_a" aria-label="Username"><span style="width:22px;height:22px;border-radius:50%;background:#2F8F5B;color:#fff;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></span></label>
+<div style="font-size:13px;font-weight:600;color:#1F6B45;padding-left:4px">@hammad_a is available</div>
+<div style="background:#FFFDFB;border:1px solid #EBCFD6;border-radius:18px;padding:16px;font-size:13px;line-height:1.7;color:#6A3A52"><b style="color:#35162B">Rules</b><br>3 to 20 characters<br>Letters, numbers and underscore only<br>Saved in lowercase</div>
+<a class="btn" href="Main.dc.html" style="margin-top:8px">Save and continue</a>
+</div>
+</div>

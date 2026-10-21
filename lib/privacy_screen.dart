@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'theme/tokens.dart';
-import 'ui/glass.dart';
-import 'ui/motion.dart';
+import 'ui/design.dart';
 
 /// A plain-language page explaining exactly what SafeHer does and does not
 /// share, and who decides. Opened from "Privacy first" in Settings.
@@ -71,99 +70,92 @@ class PrivacyGuideScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final media = MediaQuery.of(context);
-    final side = media.size.width < 360 ? 16.0 : 24.0;
     return Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: AppBar(title: const Text('Privacy first')),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 650),
-            child: ListView(
-              padding: EdgeInsets.fromLTRB(side, Space.x4, side, Space.x8),
-              children: [
-                EntranceFade(
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: Space.x6),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'You are in control',
-                          style: theme.textTheme.headlineMedium,
-                        ),
-                        const SizedBox(height: Space.x2),
-                        Text(
-                          'Making a buddy never starts an SOS and never shares '
-                          'your data. Here is exactly how it works.',
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
-                  ),
+      body: HeaderPage(
+        headerHeight: 210,
+        overlap: -22,
+        bottomPadding: 40,
+        header: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            HeaderBack(),
+            HeaderTitle(
+              'You are in control.',
+              subtitle:
+                  'Making a buddy never starts an SOS or shares your data.',
+              size: 30,
+            ),
+          ],
+        ),
+        children: [
+          const SizedBox(height: 18),
+          for (var i = 0; i < _steps.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  color: AppColors.surface,
+                  border: Border.all(color: AppColors.border),
                 ),
-                for (var i = 0; i < _steps.length; i++)
-                  EntranceFade(
-                    index: i + 1,
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: Space.x3),
-                      child: GlassPanel(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(Space.x2),
-                              decoration: BoxDecoration(
-                                borderRadius: Radii.brSm,
-                                color: AppColors.primary.withValues(
-                                  alpha: 0.18,
-                                ),
-                                border: Border.all(
-                                  color: AppColors.glassHairline,
-                                ),
-                              ),
-                              child: Icon(
-                                _steps[i].icon,
-                                color: AppColors.accent,
-                                size: 20,
-                              ),
-                            ),
-                            const SizedBox(width: Space.x4),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '${i + 1}. ${_steps[i].title}',
-                                    style: theme.textTheme.titleMedium,
-                                  ),
-                                  const SizedBox(height: Space.x1),
-                                  Text(
-                                    _steps[i].body,
-                                    style: theme.textTheme.bodyMedium,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: AppColors.secondary,
+                      ),
+                      child: Text(
+                        '${i + 1}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          color: AppColors.onHeader,
                         ),
                       ),
                     ),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.only(top: Space.x2),
-                  child: Text(
-                    'Live location, camera and microphone sharing are being '
-                    'added step by step. The rules above apply to each one '
-                    'as it arrives.',
-                    style: theme.textTheme.bodySmall,
-                  ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _steps[i].title,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            _steps[i].body,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontSize: 12.5,
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              'Live location, camera and microphone sharing are being added step by step. The rules above apply to each one as it arrives.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall,
             ),
           ),
-        ),
+        ],
       ),
     );
   }

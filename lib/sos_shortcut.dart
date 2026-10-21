@@ -2,6 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'theme/tokens.dart';
+import 'ui/design.dart';
+
 class SosShortcut extends ChangeNotifier {
   SosShortcut({
     required this.onSos,
@@ -144,87 +147,125 @@ class ShortcutSettings extends StatelessWidget {
   });
   final SosShortcut shortcut;
   final ValueChanged<String> onSelect;
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: shortcut,
-    builder: (context, _) => Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
+    builder: (context, _) {
+      final theme = Theme.of(context);
+      final keyName = shortcut.selectedKey == 'volumeUp'
+          ? 'Volume Up'
+          : 'Volume Down';
+      return Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          color: AppColors.surface,
+          border: Border.all(color: AppColors.border),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'SOS button shortcut',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            Row(
+              children: [
+                const IconChip(Icons.smartphone_rounded),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Volume key shortcut',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        'Double press $keyName to start an SOS',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (shortcut.supported)
+                  SoftSwitch(
+                    value: shortcut.enabled,
+                    label: 'Enable shortcut',
+                    onChanged: shortcut.tested ? shortcut.enable : null,
+                  ),
+              ],
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              key: ValueKey(shortcut.selectedKey),
-              initialValue: shortcut.selectedKey,
-              decoration: const InputDecoration(
-                labelText: 'Double-press button',
-                border: OutlineInputBorder(),
-              ),
-              items: const [
-                DropdownMenuItem(value: 'volumeUp', child: Text('Volume Up')),
-                DropdownMenuItem(
-                  value: 'volumeDown',
-                  child: Text('Volume Down'),
-                ),
+            Row(
+              children: [
+                for (final entry in const {
+                  'volumeUp': 'Volume Up',
+                  'volumeDown': 'Volume Down',
+                }.entries) ...[
+                  PillButton(
+                    label: entry.value,
+                    filled: shortcut.selectedKey == entry.key,
+                    tone: shortcut.selectedKey == entry.key
+                        ? null
+                        : (AppColors.tint, AppColors.textMuted),
+                    onTap: () {
+                      shortcut.select(entry.key);
+                      onSelect(entry.key);
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                ],
               ],
-              onChanged: (value) {
-                if (value != null) {
-                  shortcut.select(value);
-                  onSelect(value);
-                }
-              },
             ),
             const SizedBox(height: 12),
             Text(
-              'In the app: double-press ${shortcut.selectedKey == 'volumeUp' ? 'Volume Up' : 'Volume Down'} to start your SOS. '
-              'When enabled, a background service also watches for ${shortcut.backgroundPresses} quick presses so SOS can start while the phone is locked or SafeHer is in your pocket. '
-              'The same presses quietly stop an active SOS. Power-button combinations are not supported by Android.',
+              'When enabled, a background service also watches for ${shortcut.backgroundPresses} quick presses so SOS can start while the phone is locked. The same presses quietly stop an active SOS.',
+              style: theme.textTheme.bodySmall?.copyWith(height: 1.5),
             ),
             if (!shortcut.supported)
-              const Padding(
-                padding: EdgeInsets.only(top: 12),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   'Save your preference here. Test and enable it in the Android app.',
+                  style: theme.textTheme.bodySmall,
                 ),
               ),
             if (shortcut.supported) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               Text(
                 shortcut.testing
                     ? 'Press the selected volume button twice quickly. This test will not send SOS.'
                     : shortcut.tested
-                    ? 'Button test passed while app is open.'
-                    : 'Test the button before enabling. Repeat the test after restarting the app.',
+                    ? 'Button test passed while the app is open.'
+                    : 'Test the button before enabling. Repeat after restarting the app.',
+                style: theme.textTheme.bodySmall,
               ),
-              TextButton(
-                onPressed: shortcut.testing
-                    ? () => shortcut.enable(false)
-                    : shortcut.test,
-                child: Text(shortcut.testing ? 'Cancel test' : 'Test shortcut'),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Enable shortcut'),
-                value: shortcut.enabled,
-                onChanged: shortcut.tested ? shortcut.enable : null,
-              ),
-              const Text(
-                'While enabled, the selected volume button is used for SOS instead of adjusting volume in this app.',
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: PillButton(
+                  label: shortcut.testing ? 'Cancel test' : 'Test shortcut',
+                  onTap: shortcut.testing
+                      ? () => shortcut.enable(false)
+                      : shortcut.test,
+                ),
               ),
             ],
             if (shortcut.error != null)
-              Text(
-                shortcut.error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  shortcut.error!,
+                  style: TextStyle(color: AppColors.danger),
+                ),
               ),
           ],
         ),
-      ),
-    ),
+      );
+    },
   );
 }

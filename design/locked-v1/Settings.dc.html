@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SafeHer Settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif}
+.nav{position:absolute;left:16px;right:16px;bottom:20px;height:72px;border-radius:26px;background:#FFFDFB;border:1px solid #EBCFD6;display:flex;justify-content:space-around;align-items:center;font-size:11px;font-weight:600;color:#7A5568}
+.nv{display:flex;flex-direction:column;align-items:center;gap:4px;padding:9px 18px;border-radius:18px}
+.nv.on{background:#FADCE4;color:#8A1F4B}
+.item{display:flex;align-items:center;gap:12px;background:#FFFDFB;border:1px solid #EBCFD6;border-radius:18px;padding:13px 14px}
+.ic{width:38px;height:38px;border-radius:12px;background:#FCE9EE;display:flex;align-items:center;justify-content:center;flex:none}
+.seg{flex:1;text-align:center;padding:10px 0;border-radius:14px;font-size:13px;font-weight:700;color:#6A3A52}
+.seg.on{background:#FADCE4;color:#8A1F4B}
+
+@keyframes riseIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes dropIn{from{opacity:0;transform:translateY(-22px)}to{opacity:1;transform:none}}
+@keyframes drift{from{transform:translate(0,0)}to{transform:translate(-10px,12px)}}
+@keyframes popIn{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:none}}
+.hdr{animation:dropIn 0.7s cubic-bezier(0.2,0.9,0.25,1) backwards}
+.orb{animation:drift 7s ease-in-out infinite alternate}
+.stag>*{animation:riseIn 0.65s cubic-bezier(0.2,0.9,0.25,1) backwards}
+.stag>*:nth-child(1){animation-delay:0.12s}.stag>*:nth-child(2){animation-delay:0.19s}.stag>*:nth-child(3){animation-delay:0.26s}.stag>*:nth-child(4){animation-delay:0.33s}.stag>*:nth-child(5){animation-delay:0.40s}.stag>*:nth-child(6){animation-delay:0.47s}.stag>*:nth-child(7){animation-delay:0.54s}.stag>*:nth-child(8){animation-delay:0.61s}.stag>*:nth-child(9){animation-delay:0.68s}.stag>*:nth-child(10){animation-delay:0.75s}
+.nav{animation:riseIn 0.7s cubic-bezier(0.2,0.9,0.25,1) 0.3s backwards}
+.nv{color:inherit;text-decoration:none;transition:transform 0.2s ease,background-color 0.3s ease,color 0.3s ease}
+.nv:hover{transform:translateY(-2px)}
+.nv:active{transform:scale(0.92)}
+.row,.item,.st,.cb,.pill,.chip,.btn,.btn2,.seg{transition:transform 0.25s cubic-bezier(0.2,0.9,0.25,1),box-shadow 0.25s ease,filter 0.25s ease,background-color 0.25s ease}
+.row:hover,.item:hover,.st:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(46,20,38,0.10)}
+.row:active,.item:active,.st:active,.cb:active,.pill:active,.chip:active,.seg:active{transform:scale(0.97)}
+.btn:hover,.btn2:hover{transform:translateY(-1px);filter:brightness(1.05)}
+.btn:active,.btn2:active{transform:scale(0.97)}
+.cb:hover{transform:scale(1.06)}
+.in{transition:border-color 0.25s ease,box-shadow 0.25s ease}
+.in:focus-within{border-color:#C2255C;box-shadow:0 0 0 4px rgba(194,37,92,0.14)}
+a{color:inherit;text-decoration:none}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0.01ms !important;animation-delay:0s !important;transition-duration:0.01ms !important}}
+</style>
+</helmet>
+<div style="width:390px;height:844px;box-sizing:border-box;position:relative;overflow:hidden;background:#FFF7F3;color:#35162B">
+<div class="hdr" style="height:190px;background:#FADCE4;border-radius:0 0 44px 44px;position:relative;z-index:0;overflow:hidden;padding:60px 24px 0;box-sizing:border-box"><div class="orb" style="position:absolute;right:-70px;top:-40px;width:220px;height:220px;border-radius:50%;background:#FFC9B8;opacity:0.7;z-index:-1"></div><div class="orb" style="position:absolute;right:50px;bottom:40px;width:70px;height:70px;border-radius:50%;background:#EBD3F2;opacity:0.8;z-index:-1"></div>
+<h1 style="font-family:'Fraunces',serif;font-weight:700;font-size:34px;line-height:1.1;letter-spacing:-0.02em;margin:0">Settings</h1>
+</div>
+<div style="position:absolute;left:22px;right:22px;top:118px;background:#FFFDFB;border:1px solid #EBCFD6;border-radius:24px;padding:16px;display:flex;align-items:center;gap:14px;box-shadow:0 10px 24px rgba(46,20,38,0.10)">
+<div style="width:58px;height:58px;border-radius:50%;background:#FFFFFF;border:2px solid #C2255C;color:#B01E52;font-weight:800;font-size:22px;display:flex;align-items:center;justify-content:center">H</div>
+<div style="flex:1"><div style="font-size:17px;font-weight:800">Hammad</div><div style="font-size:13px;color:#6A3A52">@hammad_a</div></div>
+<a class="pill" href="EditProfile.dc.html" style="background:#FADCE4;color:#8A1F4B">Edit photo</a>
+</div>
+<div class="stag" style="position:absolute;left:22px;right:22px;top:228px;display:flex;flex-direction:column;gap:10px">
+<div style="font-size:12px;font-weight:700;letter-spacing:0.08em;color:#8A1F4B">APPEARANCE</div>
+<div style="display:flex;background:#FFFDFB;border:1px solid #EBCFD6;border-radius:18px;padding:5px;position:relative"><span style="{{pillStyle}}"></span><button class="seg" style="{{s0}}" onClick="{{pick0}}">System</button><button class="seg" style="{{s1}}" onClick="{{pick1}}">Light</button><button class="seg" style="{{s2}}" onClick="{{pick2}}">Dark</button></div>
+<div style="font-size:12px;font-weight:700;letter-spacing:0.08em;color:#8A1F4B;margin-top:8px">SAFETY</div>
+<a class="item" href="Privacy.dc.html"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B01E52" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span><div style="flex:1"><div style="font-size:14px;font-weight:700">Privacy first</div><div style="font-size:12px;color:#7A5568">What is shared, and who decides</div></div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7A5568" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></a>
+<a class="item" href="SosBuddies.dc.html"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B01E52" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></span><div style="flex:1"><div style="font-size:14px;font-weight:700">Manage SOS buddies</div><div style="font-size:12px;color:#7A5568">3 of 5 approved</div></div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7A5568" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></a>
+<a class="item" href="Permissions.dc.html"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B01E52" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="3"/><path d="M12 18h.01"/></svg></span><div style="flex:1"><div style="font-size:14px;font-weight:700">Volume key shortcut</div><div style="font-size:12px;color:#7A5568">Double press to start an SOS</div></div><span style="width:46px;height:28px;border-radius:999px;background:#C2255C;position:relative"><span style="position:absolute;right:3px;top:3px;width:22px;height:22px;border-radius:50%;background:#fff"></span></span></a>
+<button class="item" onClick="{{askOut}}" style="margin-top:6px;width:100%;text-align:left;font-family:inherit;color:#35162B;cursor:pointer"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B01E52" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></svg></span><div style="flex:1;font-size:14px;font-weight:700;color:#B01E52">Sign out</div></button>
+</div>
+<div style="{{dlgScrim}}" onClick="{{closeOut}}"></div>
+<div style="{{dlgCard}}"><div style="width:56px;height:56px;border-radius:50%;background:#FCE9EE;color:#B01E52;margin:0 auto;display:flex;align-items:center;justify-content:center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></svg></div><h3 style="font-family:'Fraunces',serif;font-size:24px;margin:14px 0 0">Sign out?</h3><p style="margin:8px 0 0;font-size:13.5px;line-height:1.5;color:#6A3A52">You will need your username or email and password to get back in.</p><div style="display:flex;gap:10px;margin-top:20px"><button onClick="{{closeOut}}" style="flex:1;height:50px;border-radius:999px;background:#FFFDFB;border:1px solid #EBCFD6;color:#35162B;font:700 15px 'Plus Jakarta Sans',sans-serif;cursor:pointer">Stay</button><a href="Login.dc.html" style="flex:1;height:50px;border-radius:999px;background:#C2255C;color:#fff;font:800 15px 'Plus Jakarta Sans',sans-serif;display:flex;align-items:center;justify-content:center">Sign out</a></div></div>
+<div class="nav">
+<a class="nv" href="Main.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>Home</a>
+<a class="nv" href="Buddies.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6"/><path d="M16 4.5a3.5 3.5 0 010 7M18 14c2.2.6 3.5 2.6 3.5 6"/></svg>Buddies</a>
+<a class="nv" href="Activity.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Activity</a>
+<a class="nv on" href="Settings.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Settings</a>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { theme: 1, out: false };
+this.pick0 = () => this.setState({ theme: 0 });
+this.pick1 = () => this.setState({ theme: 1 });
+this.pick2 = () => this.setState({ theme: 2 });
+this.askOut = () => this.setState({ out: true });
+this.closeOut = () => this.setState({ out: false });
+}
+renderVals() {
+const s = this.state;
+const seg = (i) => 'border:0;background:transparent;font-family:inherit;position:relative;z-index:1;cursor:pointer;transition:color 0.3s ease;color:' + (s.theme === i ? '#8A1F4B' : '#6A3A52');
+return {
+pillStyle: 'position:absolute;left:5px;top:5px;bottom:5px;width:calc((100% - 10px) / 3);border-radius:14px;background:#FADCE4;transform:translateX(' + (s.theme * 100) + '%);transition:transform 0.45s cubic-bezier(0.2,0.9,0.25,1.1)',
+s0: seg(0), s1: seg(1), s2: seg(2),
+dlgScrim: 'position:absolute;inset:0;background:rgba(53,22,43,0.45);z-index:20;opacity:' + (s.out ? 1 : 0) + ';pointer-events:' + (s.out ? 'auto' : 'none') + ';transition:opacity 0.3s ease',
+dlgCard: 'position:absolute;left:36px;right:36px;top:50%;margin-top:-140px;background:#FFF7F3;border-radius:28px;padding:24px;text-align:center;z-index:21;box-shadow:0 20px 50px rgba(53,22,43,0.3);opacity:' + (s.out ? 1 : 0) + ';transform:scale(' + (s.out ? 1 : 0.88) + ');pointer-events:' + (s.out ? 'auto' : 'none') + ';transition:opacity 0.25s ease,transform 0.45s cubic-bezier(0.3,1.4,0.5,1)',
+pick0: this.pick0, pick1: this.pick1, pick2: this.pick2, askOut: this.askOut, closeOut: this.closeOut
+};
+}
+}
+</script>
+</body>
+</html>

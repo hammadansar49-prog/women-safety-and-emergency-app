@@ -40,10 +40,9 @@ class LocationTracker {
         final first = await Geolocator.getCurrentPosition();
         onFix(_fix(first));
       } catch (_) {}
-      _sub = Geolocator.getPositionStream(locationSettings: _settings()).listen(
-        (p) => onFix(_fix(p)),
-        onError: (_) {},
-      );
+      _sub = Geolocator.getPositionStream(
+        locationSettings: _settings(),
+      ).listen((p) => onFix(_fix(p)), onError: (_) {});
       return true;
     } catch (_) {
       return false;

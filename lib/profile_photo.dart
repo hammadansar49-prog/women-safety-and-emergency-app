@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'theme/tokens.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 import 'social_controller.dart';
@@ -75,10 +76,20 @@ Widget profileAvatar(SocialController social, double radius) {
   final photo = social.photoFor(social.currentUserId);
   return CircleAvatar(
     radius: radius,
+    backgroundColor: AppColors.light ? Colors.white : AppColors.secondary,
+    foregroundColor: AppColors.light ? AppColors.accent : AppColors.text,
     backgroundImage: photo == null
         ? null
         : ProfileMemoryImage(base64Decode(photo)),
-    child: photo == null ? Text(social.currentUser.name.substring(0, 1)) : null,
+    child: photo == null
+        ? Text(
+            social.currentUser.name.substring(0, 1),
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: radius * 0.85,
+            ),
+          )
+        : null,
   );
 }
 
@@ -199,7 +210,32 @@ class _ProfilePhotoEditorState extends State<ProfilePhotoEditor> {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                profileAvatar(widget.social, 44),
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.primary, width: 3),
+                  ),
+                  child: profileAvatar(widget.social, 42),
+                ),
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.primary,
+                      border: Border.all(color: AppColors.header, width: 3),
+                    ),
+                    child: const Icon(
+                      Icons.photo_camera_outlined,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                  ),
+                ),
                 if (busy)
                   const SizedBox(
                     width: 88,
@@ -211,6 +247,15 @@ class _ProfilePhotoEditorState extends State<ProfilePhotoEditor> {
               ],
             ),
           ),
+        ),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        'Change photo',
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: AppColors.onHeader,
         ),
       ),
       if (error != null)

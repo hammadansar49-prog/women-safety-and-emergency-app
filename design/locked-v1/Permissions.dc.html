@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SafeHer Permissions</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif}
+.item{display:flex;align-items:center;gap:12px;background:#FFFDFB;border:1px solid #EBCFD6;border-radius:18px;padding:14px;transition:transform 0.25s cubic-bezier(0.2,0.9,0.25,1),box-shadow 0.25s ease}
+.item:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(46,20,38,0.10)}
+.ic{width:42px;height:42px;border-radius:13px;background:#FCE9EE;display:flex;align-items:center;justify-content:center;flex:none}
+.tg{width:46px;height:28px;border-radius:999px;position:relative;flex:none;border:0;padding:0;cursor:pointer;transition:background-color 0.3s ease}
+.tg i{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,0.2);transition:transform 0.35s cubic-bezier(0.3,1.4,0.5,1)}
+.sub{font-size:12px;color:#7A5568;margin-top:2px;line-height:1.4}
+@keyframes riseIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes dropIn{from{opacity:0;transform:translateY(-22px)}to{opacity:1;transform:none}}
+@keyframes drift{from{transform:translate(0,0)}to{transform:translate(-10px,12px)}}
+.hdr{animation:dropIn 0.7s cubic-bezier(0.2,0.9,0.25,1) backwards}
+.orb{animation:drift 7s ease-in-out infinite alternate}
+.stag>*{animation:riseIn 0.65s cubic-bezier(0.2,0.9,0.25,1) backwards}
+.stag>*:nth-child(1){animation-delay:0.12s}.stag>*:nth-child(2){animation-delay:0.19s}.stag>*:nth-child(3){animation-delay:0.26s}.stag>*:nth-child(4){animation-delay:0.33s}.stag>*:nth-child(5){animation-delay:0.40s}
+a{color:inherit;text-decoration:none}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0.01ms !important;animation-delay:0s !important;transition-duration:0.01ms !important}}
+</style>
+</helmet>
+<div style="width:390px;height:844px;box-sizing:border-box;position:relative;overflow:hidden;background:#FFF7F3;color:#35162B">
+<div class="hdr" style="height:220px;background:#FADCE4;border-radius:0 0 44px 44px;position:relative;z-index:0;overflow:hidden;padding:52px 20px 0;box-sizing:border-box"><div class="orb" style="position:absolute;right:-70px;top:-40px;width:220px;height:220px;border-radius:50%;background:#FFC9B8;opacity:0.7;z-index:-1"></div><div class="orb" style="position:absolute;right:50px;bottom:40px;width:70px;height:70px;border-radius:50%;background:#EBD3F2;opacity:0.8;z-index:-1"></div>
+<a href="Settings.dc.html" aria-label="Back" style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;margin-left:-6px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#35162B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+<h1 style="font-family:'Fraunces',serif;font-weight:700;font-size:32px;line-height:1.1;letter-spacing:-0.02em;margin:10px 4px 0">Permissions</h1>
+<p style="margin:8px 4px 0;font-size:13.5px;line-height:1.5;color:#6A3A52">You allow each one yourself. Nothing turns on silently.</p>
+</div>
+<div class="stag" style="position:absolute;left:22px;right:22px;top:196px;display:flex;flex-direction:column;gap:10px">
+<div class="item" style="box-shadow:0 10px 24px rgba(46,20,38,0.10)"><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#B01E52" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6 7-11a7 7 0 10-14 0c0 5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></span><div style="flex:1"><div style="font-size:14.5px;font-weight:700">Live location</div><div class="sub">Shared only during an SOS you start</div></div><button class="tg" aria-label="Live location" style="{{tgLoc}}" onClick="{{clickLoc}}"><i style="{{knobLoc}}"></i></button></div>
+<div class="item"><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#B01E52" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span><div style="flex:1"><div style="font-size:14.5px;font-weight:700">Camera</div><div class="sub">Lets approved buddies see what is happening</div></div><button class="tg" aria-label="Camera" style="{{tgCam}}" onClick="{{clickCam}}"><i style="{{knobCam}}"></i></button></div>
+<div class="item"><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#B01E52" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></span><div style="flex:1"><div style="font-size:14.5px;font-weight:700">Microphone</div><div class="sub">Lets approved buddies hear around you</div></div><button class="tg" aria-label="Microphone" style="{{tgMic}}" onClick="{{clickMic}}"><i style="{{knobMic}}"></i></button></div>
+<div class="item"><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#B01E52" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 17V11a6 6 0 0112 0v6l2 2H4z"/><path d="M10 21h4"/></svg></span><div style="flex:1"><div style="font-size:14.5px;font-weight:700">Notifications</div><div class="sub">Buddy requests and incoming SOS alerts</div></div><button class="tg" aria-label="Notifications" style="{{tgNot}}" onClick="{{clickNot}}"><i style="{{knobNot}}"></i></button></div>
+<div style="background:#FCE9EE;border-radius:18px;padding:14px;font-size:13px;line-height:1.55;color:#6A3A52;margin-top:4px">If you say no to one, that part is simply not shared. You can change this any time in your phone settings.</div>
+</div>
+<div style="{{scrim}}" onClick="{{deny}}"></div>
+<div style="{{card}}">
+<div style="width:56px;height:56px;border-radius:50%;background:#FCE9EE;color:#B01E52;margin:0 auto;display:flex;align-items:center;justify-content:center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></div>
+<h3 style="font-family:'Fraunces',serif;font-size:23px;line-height:1.15;margin:14px 0 0">{{askTitle}}</h3>
+<p style="margin:8px 0 0;font-size:13.5px;line-height:1.5;color:#6A3A52">{{askBody}}</p>
+<div style="display:flex;gap:10px;margin-top:20px"><button onClick="{{deny}}" style="flex:1;height:50px;border-radius:999px;background:#FFFDFB;border:1px solid #EBCFD6;color:#35162B;font:700 15px 'Plus Jakarta Sans',sans-serif;cursor:pointer">Don&#39;t allow</button><button onClick="{{allow}}" style="flex:1;height:50px;border-radius:999px;background:#C2255C;border:0;color:#fff;font:800 15px 'Plus Jakarta Sans',sans-serif;cursor:pointer">Allow</button></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { loc: true, cam: false, mic: false, not: true, ask: '' };
+this.copy = {
+loc: ['Allow SafeHer to use your location?', 'Your location is shared only while an SOS you started is active.'],
+cam: ['Allow SafeHer to use your camera?', 'Approved buddies can see through your camera only during an SOS you start.'],
+mic: ['Allow SafeHer to use your microphone?', 'Approved buddies can hear around you only during an SOS you start.']
+};
+const click = (k) => () => {
+if (this.state[k]) this.setState({ [k]: false });
+else if (this.copy[k]) this.setState({ ask: k });
+else this.setState({ [k]: true });
+};
+this.clickLoc = click('loc'); this.clickCam = click('cam'); this.clickMic = click('mic'); this.clickNot = click('not');
+this.allow = () => { const k = this.state.ask; if (k) this.setState({ [k]: true, ask: '' }); };
+this.deny = () => this.setState({ ask: '' });
+}
+renderVals() {
+const s = this.state;
+const open = !!s.ask;
+const c = this.copy[s.ask] || ['', ''];
+const tg = (on) => 'background:' + (on ? '#C2255C' : '#E7CBD3');
+const kn = (on) => 'transform:translateX(' + (on ? 18 : 0) + 'px)';
+return {
+tgLoc: tg(s.loc), tgCam: tg(s.cam), tgMic: tg(s.mic), tgNot: tg(s.not),
+knobLoc: kn(s.loc), knobCam: kn(s.cam), knobMic: kn(s.mic), knobNot: kn(s.not),
+scrim: 'position:absolute;inset:0;background:rgba(53,22,43,0.45);z-index:20;opacity:' + (open ? 1 : 0) + ';pointer-events:' + (open ? 'auto' : 'none') + ';transition:opacity 0.3s ease',
+card: 'position:absolute;left:36px;right:36px;top:50%;margin-top:-150px;background:#FFF7F3;border-radius:28px;padding:24px;text-align:center;z-index:21;box-shadow:0 20px 50px rgba(53,22,43,0.3);opacity:' + (open ? 1 : 0) + ';transform:scale(' + (open ? 1 : 0.88) + ');pointer-events:' + (open ? 'auto' : 'none') + ';transition:opacity 0.25s ease,transform 0.45s cubic-bezier(0.3,1.4,0.5,1)',
+askTitle: c[0], askBody: c[1],
+clickLoc: this.clickLoc, clickCam: this.clickCam, clickMic: this.clickMic, clickNot: this.clickNot, allow: this.allow, deny: this.deny
+};
+}
+}
+</script>
+</body>
+</html>

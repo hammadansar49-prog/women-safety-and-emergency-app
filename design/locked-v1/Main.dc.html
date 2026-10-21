@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SafeHer Home</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif}
+.nav{position:absolute;left:16px;right:16px;bottom:20px;height:72px;border-radius:26px;background:#FFFDFB;border:1px solid #EBCFD6;display:flex;justify-content:space-around;align-items:center;font-size:11px;font-weight:600;color:#7A5568}
+.nv{display:flex;flex-direction:column;align-items:center;gap:4px;padding:9px 18px;border-radius:18px}
+.nv.on{background:#FADCE4;color:#8A1F4B}
+.knob{position:absolute;left:7px;top:6px;width:58px;height:58px;border-radius:50%;background:#C2255C;color:#fff;font:800 15px 'Plus Jakarta Sans',sans-serif;display:flex;align-items:center;justify-content:center;border:0;cursor:grab;touch-action:none;z-index:2}
+.av{width:44px;height:44px;border-radius:50%;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;position:relative}
+.tick{position:absolute;right:-4px;bottom:-4px;width:18px;height:18px;border-radius:50%;background:#2F8F5B;border:2px solid #FFF7F3;display:flex;align-items:center;justify-content:center;color:#fff}
+.btn{height:58px;border-radius:999px;font:800 16px 'Plus Jakarta Sans',sans-serif;display:flex;align-items:center;justify-content:center;border:0;width:100%}
+@media (prefers-reduced-motion:reduce){*{transition-duration:0.01ms !important}}
+
+@keyframes riseIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes dropIn{from{opacity:0;transform:translateY(-22px)}to{opacity:1;transform:none}}
+@keyframes drift{from{transform:translate(0,0)}to{transform:translate(-10px,12px)}}
+@keyframes popIn{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:none}}
+.hdr{animation:dropIn 0.7s cubic-bezier(0.2,0.9,0.25,1) backwards}
+.orb{animation:drift 7s ease-in-out infinite alternate}
+.stag>*{animation:riseIn 0.65s cubic-bezier(0.2,0.9,0.25,1) backwards}
+.stag>*:nth-child(1){animation-delay:0.12s}.stag>*:nth-child(2){animation-delay:0.19s}.stag>*:nth-child(3){animation-delay:0.26s}.stag>*:nth-child(4){animation-delay:0.33s}.stag>*:nth-child(5){animation-delay:0.40s}.stag>*:nth-child(6){animation-delay:0.47s}.stag>*:nth-child(7){animation-delay:0.54s}.stag>*:nth-child(8){animation-delay:0.61s}.stag>*:nth-child(9){animation-delay:0.68s}.stag>*:nth-child(10){animation-delay:0.75s}
+.nav{animation:riseIn 0.7s cubic-bezier(0.2,0.9,0.25,1) 0.3s backwards}
+.nv{color:inherit;text-decoration:none;transition:transform 0.2s ease,background-color 0.3s ease,color 0.3s ease}
+.nv:hover{transform:translateY(-2px)}
+.nv:active{transform:scale(0.92)}
+.row,.item,.st,.cb,.pill,.chip,.btn,.btn2,.seg{transition:transform 0.25s cubic-bezier(0.2,0.9,0.25,1),box-shadow 0.25s ease,filter 0.25s ease,background-color 0.25s ease}
+.row:hover,.item:hover,.st:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(46,20,38,0.10)}
+.row:active,.item:active,.st:active,.cb:active,.pill:active,.chip:active,.seg:active{transform:scale(0.97)}
+.btn:hover,.btn2:hover{transform:translateY(-1px);filter:brightness(1.05)}
+.btn:active,.btn2:active{transform:scale(0.97)}
+.cb:hover{transform:scale(1.06)}
+.in{transition:border-color 0.25s ease,box-shadow 0.25s ease}
+.in:focus-within{border-color:#C2255C;box-shadow:0 0 0 4px rgba(194,37,92,0.14)}
+a{color:inherit;text-decoration:none}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0.01ms !important;animation-delay:0s !important;transition-duration:0.01ms !important}}
+</style>
+</helmet>
+<div style="width:390px;height:844px;box-sizing:border-box;position:relative;overflow:hidden;background:#FFF7F3;color:#35162B">
+<div class="hdr" style="height:300px;background:#FADCE4;border-radius:0 0 44px 44px;padding:56px 24px 0;box-sizing:border-box;position:relative;overflow:hidden">
+<div class="orb" style="position:absolute;right:-70px;top:-40px;width:220px;height:220px;border-radius:50%;background:#FFC9B8;opacity:0.7"></div>
+<div class="orb" style="position:absolute;right:50px;top:150px;width:70px;height:70px;border-radius:50%;background:#EBD3F2;opacity:0.8"></div>
+<div style="position:relative;display:flex;justify-content:space-between;align-items:center">
+<span style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:26px;line-height:1;letter-spacing:-0.04em;color:#35162B">Safe<span style="color:#B01E52">Her</span></span>
+<span style="width:40px;height:40px;border-radius:50%;background:#FFFFFF;color:#B01E52;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px">H</span>
+</div>
+<h1 style="position:relative;margin:24px 0 0;font-family:'Fraunces',serif;font-weight:700;font-size:34px;line-height:1.08;letter-spacing:-0.02em;color:#35162B;max-width:290px">Walk tall. Your circle is awake.</h1>
+<p style="position:relative;margin:10px 0 0;font-size:14px;line-height:1.5;color:#6A3A52;max-width:270px">One slide tells your trusted buddies where you are.</p>
+</div>
+<div style="position:absolute;left:22px;right:22px;top:262px;height:76px;border-radius:999px;background:#FFFDFB;border:1.5px solid #35162B;box-shadow:4px 5px 0 #35162B;box-sizing:border-box;overflow:hidden">
+<div style="{{fillStyle}}"></div>
+<span style="{{hintStyle}}">Slide to send alert</span>
+<button class="knob" style="{{knobStyle}}" aria-label="Slide to send SOS" onPointerDown="{{onDown}}" onPointerMove="{{onMove}}" onPointerUp="{{onUp}}" onPointerCancel="{{onUp}}" onClick="{{onKnobClick}}">SOS</button>
+</div>
+<div style="position:absolute;left:22px;right:22px;top:372px">
+<div style="display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:700"><span>Your SOS buddies</span><span style="color:#B01E52;font-weight:700">Manage</span></div>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:12px">
+<div style="background:#FFFDFB;border:1px solid #EBCFD6;border-radius:18px;padding:14px 4px;text-align:center;font-size:12px;font-weight:600"><div style="width:42px;height:42px;border-radius:50%;background:#C2255C;color:#fff;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-weight:700">A</div>Ayesha</div>
+<div style="background:#FFFDFB;border:1px solid #EBCFD6;border-radius:18px;padding:14px 4px;text-align:center;font-size:12px;font-weight:600"><div style="width:42px;height:42px;border-radius:50%;background:#7A4FA3;color:#fff;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-weight:700">S</div>Sana</div>
+<div style="background:#FFFDFB;border:1px solid #EBCFD6;border-radius:18px;padding:14px 4px;text-align:center;font-size:12px;font-weight:600"><div style="width:42px;height:42px;border-radius:50%;background:#B5532B;color:#fff;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-weight:700">M</div>Mum</div>
+<div style="background:#FFEDE5;border:1.5px dashed #D98B73;border-radius:18px;padding:14px 4px;text-align:center;font-size:12px;font-weight:600;color:#8C3A1E"><div style="width:42px;height:42px;border-radius:50%;background:#FFFDFB;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px">+</div>Add</div>
+</div>
+<div style="margin-top:18px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+<div style="background:#E4F2E9;border-radius:18px;padding:14px"><div style="font-size:12px;font-weight:600;color:#3F6B52">Location</div><div style="margin-top:3px;font-size:16px;font-weight:800;color:#1E4A33;display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:50%;background:#2E8B57"></span>Ready</div></div>
+<div style="background:#EFE3F6;border-radius:18px;padding:14px"><div style="font-size:12px;font-weight:600;color:#6B4A83">Buddies</div><div style="margin-top:3px;font-size:16px;font-weight:800;color:#3F2257">3 of 5 approved</div></div>
+</div>
+</div>
+<div class="nav">
+<a class="nv on" href="Main.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>Home</a>
+<a class="nv" href="Buddies.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6"/><path d="M16 4.5a3.5 3.5 0 010 7M18 14c2.2.6 3.5 2.6 3.5 6"/></svg>Buddies</a>
+<a class="nv" href="Activity.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Activity</a>
+<a class="nv" href="Settings.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Settings</a>
+</div>
+
+<div style="{{scrimStyle}}" onClick="{{noop}}"></div>
+<div style="{{sheetStyle}}">
+<div style="width:44px;height:5px;border-radius:99px;background:#E7B9C7;margin:12px auto 0"></div>
+<div style="{{countLayer}}">
+<div style="font-size:12px;font-weight:700;letter-spacing:0.1em;color:#8A1F4B">SOS STARTING</div>
+<h2 style="font-family:'Fraunces',serif;font-weight:700;font-size:28px;line-height:1.1;letter-spacing:-0.02em;margin:8px 0 0">Sending your alert</h2>
+<div style="position:relative;width:170px;height:170px;margin:22px auto 0">
+<svg width="170" height="170" viewBox="0 0 170 170" aria-hidden="true" style="transform:rotate(-90deg)"><circle cx="85" cy="85" r="70" fill="#FFFDFB" stroke="#F3D3DC" stroke-width="12"/><circle cx="85" cy="85" r="70" fill="none" stroke="#C2255C" stroke-width="12" stroke-linecap="round" stroke-dasharray="440" style="{{ringStyle}}"/></svg>
+<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-weight:700;font-size:72px;color:#C2255C;line-height:1">{{countText}}</div>
+</div>
+<p style="margin:16px 30px 0;font-size:14px;line-height:1.5;color:#6A3A52">Your 3 SOS buddies get your live location when the timer ends.</p>
+<button class="btn" style="background:#FFFDFB;border:1.5px solid #35162B;color:#35162B;margin-top:20px;width:calc(100% - 44px)" onClick="{{cancel}}">Cancel</button>
+</div>
+<div style="{{sentLayer}}">
+<div style="width:96px;height:96px;border-radius:50%;background:#C2255C;color:#fff;margin:0 auto;display:flex;align-items:center;justify-content:center;{{checkStyle}}"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></div>
+<h2 style="font-family:'Fraunces',serif;font-weight:700;font-size:28px;line-height:1.1;letter-spacing:-0.02em;margin:18px 0 0">Alert sent</h2>
+<p style="margin:8px 30px 0;font-size:14px;line-height:1.5;color:#6A3A52">Your buddies are seeing your live location now.</p>
+<div style="display:flex;justify-content:center;gap:22px;margin-top:20px">
+<div style="text-align:center;font-size:12px;font-weight:600"><div class="av" style="background:#C2255C;{{av0}}">A<span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></span></div><div style="margin-top:6px">Ayesha</div></div>
+<div style="text-align:center;font-size:12px;font-weight:600"><div class="av" style="background:#7A4FA3;{{av1}}">S<span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></span></div><div style="margin-top:6px">Sana</div></div>
+<div style="text-align:center;font-size:12px;font-weight:600"><div class="av" style="background:#B5532B;{{av2}}">M<span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></span></div><div style="margin-top:6px">Mum</div></div>
+</div>
+<button class="btn" style="background:#35162B;color:#FFF7F3;margin-top:24px;width:calc(100% - 44px)" onClick="{{cancel}}">I am safe &middot; End SOS</button>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { drag: 0, dragging: false, open: false, phase: 'idle', count: 3 };
+this.t = null;
+this.startX = 0;
+this.scale = 1;
+this.moved = false;
+this.onDown = this.onDown.bind(this);
+this.onMove = this.onMove.bind(this);
+this.onUp = this.onUp.bind(this);
+this.onKnobClick = this.onKnobClick.bind(this);
+this.cancel = this.cancel.bind(this);
+this.noop = () => {};
+}
+componentWillUnmount() { clearTimeout(this.t); }
+onDown(e) {
+if (this.state.open) return;
+const track = e.currentTarget.parentElement.getBoundingClientRect();
+this.scale = track.width / 346 || 1;
+this.startX = e.clientX;
+this.moved = false;
+try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {}
+this.setState({ dragging: true });
+}
+onMove(e) {
+if (!this.state.dragging) return;
+const dx = (e.clientX - this.startX) / this.scale;
+if (Math.abs(dx) > 4) this.moved = true;
+this.setState({ drag: Math.max(0, Math.min(270, dx)) });
+}
+onUp() {
+if (!this.state.dragging) return;
+if (this.state.drag >= 230) this.complete();
+else this.setState({ dragging: false, drag: 0 });
+}
+onKnobClick() {
+if (this.moved) { this.moved = false; return; }
+if (!this.state.open) this.complete();
+}
+complete() {
+this.setState({ dragging: false, drag: 270 });
+clearTimeout(this.t);
+this.t = setTimeout(() => { this.setState({ open: true, phase: 'count', count: 3 }); this.tick(); }, 300);
+}
+tick() {
+this.t = setTimeout(() => {
+const c = this.state.count - 1;
+if (c <= 0) this.setState({ count: 0, phase: 'sent' });
+else { this.setState({ count: c }); this.tick(); }
+}, 1000);
+}
+cancel() {
+clearTimeout(this.t);
+this.setState({ open: false });
+this.t = setTimeout(() => this.setState({ drag: 0, phase: 'idle', count: 3 }), 600);
+}
+renderVals() {
+const s = this.state;
+const ease = 'cubic-bezier(0.2,0.9,0.25,1)';
+const tr = s.dragging ? 'none' : 'transform 0.5s ' + ease + ', width 0.5s ' + ease + ', opacity 0.3s ease';
+const counting = s.phase === 'count';
+const sent = s.phase === 'sent';
+const pop = (i) => ({ transform: 'scale(' + (sent ? 1 : 0.4) + ')', opacity: sent ? 1 : 0, transition: 'transform 0.5s cubic-bezier(0.3,1.4,0.5,1) ' + (0.15 + i * 0.12) + 's, opacity 0.3s ease ' + (0.15 + i * 0.12) + 's' });
+const ps = (i) => { const p = pop(i); return 'transform:' + p.transform + ';opacity:' + p.opacity + ';transition:' + p.transition; };
+return {
+knobStyle: 'transform:translateX(' + s.drag + 'px);transition:' + tr,
+fillStyle: 'position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:#FADCE4;width:' + (s.drag + 66) + 'px;transition:' + tr,
+hintStyle: 'position:absolute;left:0;right:0;top:0;bottom:0;display:flex;align-items:center;justify-content:center;padding-left:56px;font-size:14px;font-weight:700;color:#35162B;opacity:' + Math.max(0, 1 - s.drag / 150) + ';transition:' + (s.dragging ? 'none' : 'opacity 0.3s ease'),
+scrimStyle: 'position:absolute;inset:0;background:rgba(53,22,43,0.5);z-index:10;opacity:' + (s.open ? 1 : 0) + ';pointer-events:' + (s.open ? 'auto' : 'none') + ';transition:opacity 0.4s ease',
+sheetStyle: 'position:absolute;left:0;right:0;bottom:0;height:500px;background:#FFF7F3;border-radius:36px 36px 0 0;z-index:11;text-align:center;box-shadow:0 -12px 40px rgba(53,22,43,0.25);transform:translateY(' + (s.open ? 0 : 104) + '%);transition:transform 0.6s ' + ease,
+countLayer: 'position:absolute;left:0;right:0;top:34px;opacity:' + (counting ? 1 : 0) + ';transform:scale(' + (counting ? 1 : 0.94) + ');transition:opacity 0.35s ease,transform 0.45s ' + ease + ';pointer-events:' + (counting ? 'auto' : 'none'),
+sentLayer: 'position:absolute;left:0;right:0;top:50px;opacity:' + (sent ? 1 : 0) + ';transform:scale(' + (sent ? 1 : 1.06) + ');transition:opacity 0.4s ease 0.15s,transform 0.5s ' + ease + ' 0.15s;pointer-events:' + (sent ? 'auto' : 'none'),
+ringStyle: 'stroke-dashoffset:' + (440 * (4 - s.count) / 3 - (s.phase === 'sent' ? 0 : 0)) + ';transition:stroke-dashoffset 1s linear',
+countText: String(s.count || 1),
+checkStyle: 'transform:scale(' + (sent ? 1 : 0.3) + ');transition:transform 0.6s cubic-bezier(0.3,1.5,0.5,1) 0.1s',
+av0: ps(0), av1: ps(1), av2: ps(2),
+onDown: this.onDown, onMove: this.onMove, onUp: this.onUp, onKnobClick: this.onKnobClick, cancel: this.cancel, noop: this.noop
+};
+}
+}
+</script>
+</body>
+</html>

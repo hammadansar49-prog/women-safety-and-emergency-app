@@ -1,0 +1,49 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=390">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif}
+.st{display:flex;gap:14px;background:#FFFDFB;border:1px solid #EBCFD6;border-radius:20px;padding:14px}
+.n{width:34px;height:34px;border-radius:12px;background:#FADCE4;color:#8A1F4B;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;flex:none}
+.st b{font-size:14.5px;display:block}
+.st span{font-size:12.5px;line-height:1.5;color:#6A3A52;display:block;margin-top:3px}
+
+@keyframes riseIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes dropIn{from{opacity:0;transform:translateY(-22px)}to{opacity:1;transform:none}}
+@keyframes drift{from{transform:translate(0,0)}to{transform:translate(-10px,12px)}}
+@keyframes popIn{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:none}}
+.hdr{animation:dropIn 0.7s cubic-bezier(0.2,0.9,0.25,1) backwards}
+.orb{animation:drift 7s ease-in-out infinite alternate}
+.stag>*{animation:riseIn 0.65s cubic-bezier(0.2,0.9,0.25,1) backwards}
+.stag>*:nth-child(1){animation-delay:0.12s}.stag>*:nth-child(2){animation-delay:0.19s}.stag>*:nth-child(3){animation-delay:0.26s}.stag>*:nth-child(4){animation-delay:0.33s}.stag>*:nth-child(5){animation-delay:0.40s}.stag>*:nth-child(6){animation-delay:0.47s}.stag>*:nth-child(7){animation-delay:0.54s}.stag>*:nth-child(8){animation-delay:0.61s}.stag>*:nth-child(9){animation-delay:0.68s}.stag>*:nth-child(10){animation-delay:0.75s}
+.nav{animation:riseIn 0.7s cubic-bezier(0.2,0.9,0.25,1) 0.3s backwards}
+.nv{color:inherit;text-decoration:none;transition:transform 0.2s ease,background-color 0.3s ease,color 0.3s ease}
+.nv:hover{transform:translateY(-2px)}
+.nv:active{transform:scale(0.92)}
+.row,.item,.st,.cb,.pill,.chip,.btn,.btn2,.seg{transition:transform 0.25s cubic-bezier(0.2,0.9,0.25,1),box-shadow 0.25s ease,filter 0.25s ease,background-color 0.25s ease}
+.row:hover,.item:hover,.st:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(46,20,38,0.10)}
+.row:active,.item:active,.st:active,.cb:active,.pill:active,.chip:active,.seg:active{transform:scale(0.97)}
+.btn:hover,.btn2:hover{transform:translateY(-1px);filter:brightness(1.05)}
+.btn:active,.btn2:active{transform:scale(0.97)}
+.cb:hover{transform:scale(1.06)}
+.in{transition:border-color 0.25s ease,box-shadow 0.25s ease}
+.in:focus-within{border-color:#C2255C;box-shadow:0 0 0 4px rgba(194,37,92,0.14)}
+a{color:inherit;text-decoration:none}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0.01ms !important;animation-delay:0s !important;transition-duration:0.01ms !important}}
+</style>
+<body style="margin:0;background:#fff">
+
+<div style="width:390px;height:844px;box-sizing:border-box;position:relative;overflow:hidden;background:#FFF7F3;color:#35162B">
+<div class="hdr" style="height:210px;background:#FADCE4;border-radius:0 0 44px 44px;position:relative;z-index:0;overflow:hidden;padding:52px 20px 0;box-sizing:border-box"><div class="orb" style="position:absolute;right:-70px;top:-40px;width:220px;height:220px;border-radius:50%;background:#FFC9B8;opacity:0.7;z-index:-1"></div><div class="orb" style="position:absolute;right:50px;bottom:40px;width:70px;height:70px;border-radius:50%;background:#EBD3F2;opacity:0.8;z-index:-1"></div>
+<a href="Settings.dc.html" aria-label="Back" style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;margin-left:-6px;text-decoration:none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#35162B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+<h1 style="font-family:'Fraunces',serif;font-weight:700;font-size:32px;line-height:1.1;letter-spacing:-0.02em;margin:10px 4px 0">You are in control.</h1>
+<p style="margin:8px 4px 0;font-size:13.5px;line-height:1.5;color:#6A3A52">Making a buddy never starts an SOS or shares your data.</p>
+</div>
+<div class="stag" style="position:absolute;left:22px;right:22px;top:232px;display:flex;flex-direction:column;gap:10px">
+<div class="st"><span class="n">1</span><div><b>Becoming buddies is just chat</b><span>Nothing about your location, camera or microphone is shared.</span></div></div>
+<div class="st"><span class="n">2</span><div><b>You choose who gets your SOS</b><span>Only buddies you star can receive it, up to five at once.</span></div></div>
+<div class="st"><span class="n">3</span><div><b>They must agree first</b><span>A starred buddy receives your SOS only after they accept.</span></div></div>
+<div class="st"><span class="n">4</span><div><b>Nothing is shared until you start</b><span>Sharing begins only when you trigger an SOS, and ends when you stop it.</span></div></div>
+<div class="st"><span class="n">5</span><div><b>You allow every permission</b><span>Location, camera and microphone each ask you first on your phone.</span></div></div>
+</div>
+<div style="position:absolute;left:22px;right:22px;bottom:28px;font-size:12.5px;line-height:1.5;color:#7A5568;text-align:center">Change your mind any time. Removing a buddy takes effect immediately.</div>
+</div>

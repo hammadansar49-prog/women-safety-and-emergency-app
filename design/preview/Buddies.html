@@ -1,0 +1,58 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=390">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif}
+.nav{position:absolute;left:16px;right:16px;bottom:20px;height:72px;border-radius:26px;background:#FFFDFB;border:1px solid #EBCFD6;display:flex;justify-content:space-around;align-items:center;font-size:11px;font-weight:600;color:#7A5568}
+.nv{display:flex;flex-direction:column;align-items:center;gap:4px;padding:9px 18px;border-radius:18px}
+.nv.on{background:#FADCE4;color:#8A1F4B}
+.row{display:flex;align-items:center;gap:12px;background:#FFFDFB;border:1px solid #EBCFD6;border-radius:18px;padding:12px 14px}
+.av{width:42px;height:42px;border-radius:50%;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+.pill{padding:9px 14px;border-radius:999px;font-size:12.5px;font-weight:700;white-space:nowrap}
+
+@keyframes riseIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes dropIn{from{opacity:0;transform:translateY(-22px)}to{opacity:1;transform:none}}
+@keyframes drift{from{transform:translate(0,0)}to{transform:translate(-10px,12px)}}
+@keyframes popIn{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:none}}
+.hdr{animation:dropIn 0.7s cubic-bezier(0.2,0.9,0.25,1) backwards}
+.orb{animation:drift 7s ease-in-out infinite alternate}
+.stag>*{animation:riseIn 0.65s cubic-bezier(0.2,0.9,0.25,1) backwards}
+.stag>*:nth-child(1){animation-delay:0.12s}.stag>*:nth-child(2){animation-delay:0.19s}.stag>*:nth-child(3){animation-delay:0.26s}.stag>*:nth-child(4){animation-delay:0.33s}.stag>*:nth-child(5){animation-delay:0.40s}.stag>*:nth-child(6){animation-delay:0.47s}.stag>*:nth-child(7){animation-delay:0.54s}.stag>*:nth-child(8){animation-delay:0.61s}.stag>*:nth-child(9){animation-delay:0.68s}.stag>*:nth-child(10){animation-delay:0.75s}
+.nav{animation:riseIn 0.7s cubic-bezier(0.2,0.9,0.25,1) 0.3s backwards}
+.nv{color:inherit;text-decoration:none;transition:transform 0.2s ease,background-color 0.3s ease,color 0.3s ease}
+.nv:hover{transform:translateY(-2px)}
+.nv:active{transform:scale(0.92)}
+.row,.item,.st,.cb,.pill,.chip,.btn,.btn2,.seg{transition:transform 0.25s cubic-bezier(0.2,0.9,0.25,1),box-shadow 0.25s ease,filter 0.25s ease,background-color 0.25s ease}
+.row:hover,.item:hover,.st:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(46,20,38,0.10)}
+.row:active,.item:active,.st:active,.cb:active,.pill:active,.chip:active,.seg:active{transform:scale(0.97)}
+.btn:hover,.btn2:hover{transform:translateY(-1px);filter:brightness(1.05)}
+.btn:active,.btn2:active{transform:scale(0.97)}
+.cb:hover{transform:scale(1.06)}
+.in{transition:border-color 0.25s ease,box-shadow 0.25s ease}
+.in:focus-within{border-color:#C2255C;box-shadow:0 0 0 4px rgba(194,37,92,0.14)}
+a{color:inherit;text-decoration:none}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0.01ms !important;animation-delay:0s !important;transition-duration:0.01ms !important}}
+</style>
+<body style="margin:0;background:#fff">
+
+<div style="width:390px;height:844px;box-sizing:border-box;position:relative;overflow:hidden;background:#FFF7F3;color:#35162B">
+<div class="hdr" style="height:190px;background:#FADCE4;border-radius:0 0 44px 44px;position:relative;z-index:0;overflow:hidden;padding:60px 24px 0;box-sizing:border-box"><div class="orb" style="position:absolute;right:-70px;top:-40px;width:220px;height:220px;border-radius:50%;background:#FFC9B8;opacity:0.7;z-index:-1"></div><div class="orb" style="position:absolute;right:50px;bottom:40px;width:70px;height:70px;border-radius:50%;background:#EBD3F2;opacity:0.8;z-index:-1"></div>
+<h1 style="font-family:'Fraunces',serif;font-weight:700;font-size:34px;line-height:1.1;letter-spacing:-0.02em;margin:0">Buddies</h1>
+<p style="margin:8px 0 0;font-size:14px;color:#6A3A52">Find people by username. Tap a buddy to chat.</p>
+</div>
+<label style="position:absolute;left:22px;right:22px;top:160px;height:58px;border-radius:999px;background:#FFFDFB;border:1px solid #E7B9C7;display:flex;align-items:center;gap:12px;padding:0 18px;box-sizing:border-box;box-shadow:0 8px 20px rgba(46,20,38,0.10)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7A5568" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input type="text" value="ay" aria-label="Search username" style="flex:1;border:0;background:transparent;font:600 15px 'Plus Jakarta Sans',sans-serif;color:#35162B;outline:0"></label>
+<div class="stag" style="position:absolute;left:22px;right:22px;top:244px;display:flex;flex-direction:column;gap:10px">
+<div style="font-size:12px;font-weight:700;letter-spacing:0.08em;color:#8A1F4B">SEARCH RESULTS</div>
+<a class="row" href="Chat.dc.html"><div class="av" style="background:#C2255C">A</div><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700">@ayesha</div><div style="font-size:12px;color:#7A5568">Buddy</div></div><span class="pill" style="background:#FADCE4;color:#8A1F4B">Message</span></a>
+<div class="row"><div class="av" style="background:#6B2A55">A</div><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700">@ayra_m</div><div style="font-size:12px;color:#7A5568">Not a buddy yet</div></div><button class="pill" onClick="" style=""></button></div>
+<div class="row"><div class="av" style="background:#9A4A3F">A</div><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700">@aysha_r</div><div style="font-size:12px;color:#7A5568">Request sent</div></div><span class="pill" style="background:#FFEDE5;color:#8C3A1E;border:1px solid #F1CDBE">Requested</span></div>
+<div style="font-size:12px;font-weight:700;letter-spacing:0.08em;color:#8A1F4B;margin-top:10px">REQUESTS FOR YOU</div>
+<div class="row"><div class="av" style="background:#7C5568">S</div><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700">@sana_k</div><div style="font-size:12px;color:#7A5568">wants to be your buddy</div></div><span class="pill" style="background:#C2255C;color:#fff">Accept</span><span class="pill" style="background:#FFFDFB;color:#6A3A52;border:1px solid #EBCFD6;padding:9px 12px">Decline</span></div>
+</div>
+<div style=""></div>
+<div class="nav">
+<a class="nv" href="Main.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>Home</a>
+<a class="nv on" href="Buddies.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6"/><path d="M16 4.5a3.5 3.5 0 010 7M18 14c2.2.6 3.5 2.6 3.5 6"/></svg>Buddies</a>
+<a class="nv" href="Activity.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Activity</a>
+<a class="nv" href="Settings.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Settings</a>
+</div>
+</div>

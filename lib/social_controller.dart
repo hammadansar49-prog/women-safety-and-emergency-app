@@ -142,7 +142,9 @@ class SocialController extends ChangeNotifier {
     c.person(c._currentUserId);
     c._sequence = m['sequence'];
     c.signedIn = m['signedIn'];
-    c.appearance = m['appearance'] ?? 'system';
+    c.appearanceChosen = m['appearanceChosen'] == true;
+    // The baby pink light design is the default until the user picks otherwise.
+    c.appearance = c.appearanceChosen ? (m['appearance'] ?? 'light') : 'light';
     c.countdown = m['countdown'] ?? 5;
     c.shortcutKey = m['shortcutKey'] == 'volumeDown'
         ? 'volumeDown'
@@ -194,6 +196,7 @@ class SocialController extends ChangeNotifier {
     'sequence': _sequence,
     'signedIn': signedIn,
     'appearance': appearance,
+    'appearanceChosen': appearanceChosen,
     'countdown': countdown,
     'shortcutKey': shortcutKey,
     'photos': _photos,
@@ -241,7 +244,8 @@ class SocialController extends ChangeNotifier {
   bool _disposed = false;
   int _saveRevision = 0;
   bool signedIn = false;
-  String appearance = 'system';
+  String appearance = 'light';
+  bool appearanceChosen = false;
   int countdown = 5;
   String shortcutKey = 'volumeUp';
   void setShortcutKey(String value) {
@@ -285,6 +289,7 @@ class SocialController extends ChangeNotifier {
 
   void setAppearance(String value) {
     appearance = value;
+    appearanceChosen = true;
     notifyListeners();
   }
 
@@ -521,6 +526,16 @@ class SocialController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Preview only: makes [friendId] an approved SOS buddy so the SOS flow can
+  /// be exercised without a second device.
+  void seedDemoSosBuddy(String friendId) {
+    if (!areFriends(currentUserId, friendId)) return;
+    final key = _directed(currentUserId, friendId);
+    _favorites.add(key);
+    _approved.add(key);
+    notifyListeners();
+  }
+
   /// How many buddies can receive one SOS at the same time.
   static const maxSosBuddies = 5;
 
@@ -647,12 +662,7 @@ class SocialController extends ChangeNotifier {
 
   /// Records the latest live position on an active SOS. Called for every fix
   /// while the SOS runs, and once more with the final fix when it ends.
-  void updateSosLocation(
-    String eventId,
-    double lat,
-    double lng,
-    DateTime at,
-  ) {
+  void updateSosLocation(String eventId, double lat, double lng, DateTime at) {
     final index = _events.indexWhere((e) => e.id == eventId);
     if (index < 0 || _events[index].senderId != currentUserId) return;
     _events[index] = _events[index].copyWith(

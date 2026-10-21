@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SafeHer SOS countdown</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+.pulse{animation:pulse 1.4s ease-in-out infinite}
+@keyframes riseIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes dropIn{from{opacity:0;transform:translateY(-22px)}to{opacity:1;transform:none}}
+@keyframes drift{from{transform:translate(0,0)}to{transform:translate(-10px,12px)}}
+@keyframes popIn{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:none}}
+.hdr{animation:dropIn 0.7s cubic-bezier(0.2,0.9,0.25,1) backwards}
+.orb{animation:drift 7s ease-in-out infinite alternate}
+.stag>*{animation:riseIn 0.65s cubic-bezier(0.2,0.9,0.25,1) backwards}
+.stag>*:nth-child(1){animation-delay:0.12s}.stag>*:nth-child(2){animation-delay:0.19s}.stag>*:nth-child(3){animation-delay:0.26s}.stag>*:nth-child(4){animation-delay:0.33s}.stag>*:nth-child(5){animation-delay:0.40s}.stag>*:nth-child(6){animation-delay:0.47s}.stag>*:nth-child(7){animation-delay:0.54s}.stag>*:nth-child(8){animation-delay:0.61s}.stag>*:nth-child(9){animation-delay:0.68s}.stag>*:nth-child(10){animation-delay:0.75s}
+.nav{animation:riseIn 0.7s cubic-bezier(0.2,0.9,0.25,1) 0.3s backwards}
+.nv{color:inherit;text-decoration:none;transition:transform 0.2s ease,background-color 0.3s ease,color 0.3s ease}
+.nv:hover{transform:translateY(-2px)}
+.nv:active{transform:scale(0.92)}
+.row,.item,.st,.cb,.pill,.chip,.btn,.btn2,.seg{transition:transform 0.25s cubic-bezier(0.2,0.9,0.25,1),box-shadow 0.25s ease,filter 0.25s ease,background-color 0.25s ease}
+.row:hover,.item:hover,.st:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(46,20,38,0.10)}
+.row:active,.item:active,.st:active,.cb:active,.pill:active,.chip:active,.seg:active{transform:scale(0.97)}
+.btn:hover,.btn2:hover{transform:translateY(-1px);filter:brightness(1.05)}
+.btn:active,.btn2:active{transform:scale(0.97)}
+.cb:hover{transform:scale(1.06)}
+.in{transition:border-color 0.25s ease,box-shadow 0.25s ease}
+.in:focus-within{border-color:#C2255C;box-shadow:0 0 0 4px rgba(194,37,92,0.14)}
+a{color:inherit;text-decoration:none}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0.01ms !important;animation-delay:0s !important;transition-duration:0.01ms !important}}
+</style>
+</helmet>
+<div style="width:390px;height:844px;box-sizing:border-box;position:relative;overflow:hidden;background:#FADCE4;color:#35162B;text-align:center"><div class="orb" style="position:absolute;right:-70px;top:-40px;width:220px;height:220px;border-radius:50%;background:#FFC9B8;opacity:0.7"></div><div class="orb" style="position:absolute;right:50px;bottom:110px;width:70px;height:70px;border-radius:50%;background:#EBD3F2;opacity:0.8"></div>
+<div style="position:absolute;left:0;right:0;top:80px;font-size:12px;font-weight:700;letter-spacing:0.1em;color:#8A1F4B">SOS STARTING</div>
+<h1 style="position:absolute;left:0;right:0;top:106px;margin:0;font-family:'Fraunces',serif;font-weight:700;font-size:34px;line-height:1.1;letter-spacing:-0.02em">Sending your alert</h1>
+<div class="pulse" style="position:absolute;left:50%;top:210px;margin-left:-130px;width:260px;height:260px;border-radius:50%;background:#FFEDE5;display:flex;align-items:center;justify-content:center">
+<div style="width:210px;height:210px;border-radius:50%;background:#FFFDFB;border:10px solid #C2255C;box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-weight:700;font-size:104px;color:#C2255C;line-height:1">{{count}}</div>
+</div>
+<p style="position:absolute;left:40px;right:40px;top:506px;margin:0;font-size:15px;line-height:1.55;color:#6A3A52">Your 3 SOS buddies will get your live location when the timer ends.</p>
+<a href="SosActive.dc.html" style="display:flex;align-items:center;justify-content:center;position:absolute;left:22px;right:22px;bottom:70px;height:60px;border-radius:999px;background:#FFFDFB;border:1.5px solid #35162B;color:#35162B;font:800 17px 'Plus Jakarta Sans',sans-serif">Cancel</a>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { count: 3 };
+this.iv = null;
+}
+componentDidMount() { this.iv = setInterval(() => this.setState({ count: this.state.count <= 1 ? 3 : this.state.count - 1 }), 1000); }
+componentWillUnmount() { clearInterval(this.iv); }
+renderVals() { return { count: String(this.state.count) }; }
+}
+</script>
+</body>
+</html>

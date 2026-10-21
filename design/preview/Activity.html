@@ -1,0 +1,61 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=390">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif}
+.nav{position:absolute;left:16px;right:16px;bottom:20px;height:72px;border-radius:26px;background:#FFFDFB;border:1px solid #EBCFD6;display:flex;justify-content:space-around;align-items:center;font-size:11px;font-weight:600;color:#7A5568}
+.nv{display:flex;flex-direction:column;align-items:center;gap:4px;padding:9px 18px;border-radius:18px}
+.nv.on{background:#FADCE4;color:#8A1F4B}
+.chip{padding:9px 16px;border-radius:999px;font-size:13px;font-weight:700;border:1px solid #EBCFD6;background:#FFFDFB;color:#6A3A52}
+.chip.on{background:#C2255C;border-color:#C2255C;color:#fff}
+
+@keyframes riseIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes dropIn{from{opacity:0;transform:translateY(-22px)}to{opacity:1;transform:none}}
+@keyframes drift{from{transform:translate(0,0)}to{transform:translate(-10px,12px)}}
+@keyframes popIn{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:none}}
+.hdr{animation:dropIn 0.7s cubic-bezier(0.2,0.9,0.25,1) backwards}
+.orb{animation:drift 7s ease-in-out infinite alternate}
+.stag>*{animation:riseIn 0.65s cubic-bezier(0.2,0.9,0.25,1) backwards}
+.stag>*:nth-child(1){animation-delay:0.12s}.stag>*:nth-child(2){animation-delay:0.19s}.stag>*:nth-child(3){animation-delay:0.26s}.stag>*:nth-child(4){animation-delay:0.33s}.stag>*:nth-child(5){animation-delay:0.40s}.stag>*:nth-child(6){animation-delay:0.47s}.stag>*:nth-child(7){animation-delay:0.54s}.stag>*:nth-child(8){animation-delay:0.61s}.stag>*:nth-child(9){animation-delay:0.68s}.stag>*:nth-child(10){animation-delay:0.75s}
+.nav{animation:riseIn 0.7s cubic-bezier(0.2,0.9,0.25,1) 0.3s backwards}
+.nv{color:inherit;text-decoration:none;transition:transform 0.2s ease,background-color 0.3s ease,color 0.3s ease}
+.nv:hover{transform:translateY(-2px)}
+.nv:active{transform:scale(0.92)}
+.row,.item,.st,.cb,.pill,.chip,.btn,.btn2,.seg{transition:transform 0.25s cubic-bezier(0.2,0.9,0.25,1),box-shadow 0.25s ease,filter 0.25s ease,background-color 0.25s ease}
+.row:hover,.item:hover,.st:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(46,20,38,0.10)}
+.row:active,.item:active,.st:active,.cb:active,.pill:active,.chip:active,.seg:active{transform:scale(0.97)}
+.btn:hover,.btn2:hover{transform:translateY(-1px);filter:brightness(1.05)}
+.btn:active,.btn2:active{transform:scale(0.97)}
+.cb:hover{transform:scale(1.06)}
+.in{transition:border-color 0.25s ease,box-shadow 0.25s ease}
+.in:focus-within{border-color:#C2255C;box-shadow:0 0 0 4px rgba(194,37,92,0.14)}
+a{color:inherit;text-decoration:none}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0.01ms !important;animation-delay:0s !important;transition-duration:0.01ms !important}}
+</style>
+<body style="margin:0;background:#fff">
+
+<div style="width:390px;height:844px;box-sizing:border-box;position:relative;overflow:hidden;background:#FFF7F3;color:#35162B">
+<div class="hdr" style="height:190px;background:#FADCE4;border-radius:0 0 44px 44px;position:relative;z-index:0;overflow:hidden;padding:60px 24px 0;box-sizing:border-box"><div class="orb" style="position:absolute;right:-70px;top:-40px;width:220px;height:220px;border-radius:50%;background:#FFC9B8;opacity:0.7;z-index:-1"></div><div class="orb" style="position:absolute;right:50px;bottom:40px;width:70px;height:70px;border-radius:50%;background:#EBD3F2;opacity:0.8;z-index:-1"></div>
+<h1 style="font-family:'Fraunces',serif;font-weight:700;font-size:34px;line-height:1.1;letter-spacing:-0.02em;margin:0">Activity</h1>
+<p style="margin:8px 0 0;font-size:14px;color:#6A3A52">Your SOS history, kept private.</p>
+</div>
+<div style="position:absolute;left:22px;right:22px;top:166px;display:flex;gap:8px"><span class="chip on">All</span><span class="chip">SOS</span><span class="chip">Buddies</span></div>
+<div class="stag" style="position:absolute;left:22px;right:22px;top:228px;display:flex;flex-direction:column;gap:12px">
+<div style="background:#FFFDFB;border:1px solid #EBCFD6;border-radius:22px;padding:14px">
+<div style="height:120px;border-radius:14px;background:#FCE9EE;position:relative;overflow:hidden">
+<svg width="100%" height="120" viewBox="0 0 320 120" preserveAspectRatio="none" aria-hidden="true"><path d="M0 90C60 80 90 30 150 50S250 100 320 40" fill="none" stroke="#E7B9C7" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 7"/><path d="M-10 30L330 70" stroke="#F4D3DC" stroke-width="10"/><path d="M110 -10L170 130" stroke="#F4D3DC" stroke-width="8"/></svg>
+<div style="position:absolute;left:228px;top:34px;width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#C2255C"></div>
+<div style="position:absolute;left:236px;top:42px;width:14px;height:14px;border-radius:50%;background:#fff"></div>
+</div>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><div style="font-size:15px;font-weight:800">SOS ended here</div><span style="font-size:12px;font-weight:700;color:#1F6B45;background:#E4F2E9;padding:5px 10px;border-radius:999px">Resolved</span></div>
+<div style="font-size:12.5px;color:#6A3A52;margin-top:4px">Today, 8:12 pm &middot; 14 min &middot; shared with 3 buddies</div>
+</div>
+<div style="display:flex;align-items:center;gap:12px;background:#FFFDFB;border:1px solid #EBCFD6;border-radius:18px;padding:13px 14px"><span style="width:40px;height:40px;border-radius:12px;background:#FCE9EE;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B01E52" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg></span><div style="flex:1"><div style="font-size:14px;font-weight:700">Test SOS</div><div style="font-size:12px;color:#7A5568">Yesterday, 6:40 pm &middot; cancelled in countdown</div></div></div>
+<div style="display:flex;align-items:center;gap:12px;background:#FFFDFB;border:1px solid #EBCFD6;border-radius:18px;padding:13px 14px"><span style="width:40px;height:40px;border-radius:12px;background:#FCE9EE;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B01E52" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6"/></svg></span><div style="flex:1"><div style="font-size:14px;font-weight:700">Ayesha became your buddy</div><div style="font-size:12px;color:#7A5568">Mon, 5:02 pm</div></div></div>
+</div>
+<div class="nav">
+<a class="nv" href="Main.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>Home</a>
+<a class="nv" href="Buddies.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6"/><path d="M16 4.5a3.5 3.5 0 010 7M18 14c2.2.6 3.5 2.6 3.5 6"/></svg>Buddies</a>
+<a class="nv on" href="Activity.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Activity</a>
+<a class="nv" href="Settings.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Settings</a>
+</div>
+</div>

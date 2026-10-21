@@ -4,6 +4,7 @@ import 'emergency_controller.dart';
 import 'firebase_options.dart';
 import 'social_controller.dart';
 import 'contacts_screen.dart';
+import 'chat_screen.dart';
 import 'username_screen.dart';
 import 'local_store.dart';
 import 'auth_screens.dart';
@@ -17,14 +18,21 @@ import 'theme/tokens.dart';
 import 'ui/aurora_background.dart';
 import 'ui/glass.dart';
 import 'ui/motion.dart';
-import 'ui/sos_button.dart';
+import 'ui/design.dart';
+import 'ui/sos_slider.dart';
+import 'profile_screen.dart';
+import 'sos_buddies_screen.dart';
+import 'permissions_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Connect Firebase only where it is configured (Android for now). Other
   // platforms keep running in local-only mode so nothing breaks before their
   // Firebase apps are registered.
-  if (DefaultFirebaseOptions.hasPlatformOptions) {
+  // `--dart-define=SAFEHER_LOCAL=true` runs fully local (no Firebase) and signs
+  // in a demo profile, for design previews and automated checks.
+  const localPreview = bool.fromEnvironment('SAFEHER_LOCAL');
+  if (!localPreview && DefaultFirebaseOptions.hasPlatformOptions) {
     try {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
@@ -36,6 +44,20 @@ Future<void> main() async {
   }
   try {
     final social = await loadLocalAccount();
+    final previewScreen = localPreview
+        ? Uri.base.queryParameters['screen']
+        : null;
+    if (localPreview &&
+        !social.signedIn &&
+        previewScreen != 'login' &&
+        previewScreen != 'register') {
+      if (social.currentUser.username.isEmpty && previewScreen != 'username') {
+        social.claimUsername('tester_one');
+      }
+      social.setSignedIn(true);
+      social.seedDemoFriend('ayesha');
+      social.seedDemoSosBuddy('ayesha');
+    }
     try {
       await recoverProfilePhoto(social);
     } catch (_) {
@@ -161,7 +183,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
   String? activeEventId;
 
   /// Which auth surface is showing while the user is not yet signed in.
-  _AuthStage _stage = _AuthStage.welcome;
+  _AuthStage _stage = _AuthStage.login;
 
   /// "In the app" means signed in AND a username exists. Google sign-in lands
   /// signed-in-but-no-username, which routes to the username step first.
@@ -209,6 +231,59 @@ class _SafeHerShellState extends State<SafeHerShell> {
       }
     }
     emergency.addListener(_syncEmergency);
+    if (const bool.fromEnvironment('SAFEHER_LOCAL')) {
+      final screen = Uri.base.queryParameters['screen'];
+      if (screen != null) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _previewScreen(screen),
+        );
+      }
+    }
+  }
+
+  /// Preview builds only: `?screen=chat` opens that screen directly, so every
+  /// screen can be captured and compared with the design.
+  void _previewScreen(String screen) {
+    if (!mounted) return;
+    switch (screen) {
+      case 'buddies':
+        setState(() => page = 1);
+      case 'activity':
+        setState(() => page = 2);
+      case 'settings':
+        setState(() => page = 3);
+      case 'register':
+        setState(() => _stage = _AuthStage.register);
+      case 'chat':
+        Navigator.of(context).push(
+          SafeRoute<void>(
+            builder: (_) => ChatScreen(social: social, friendId: 'ayesha'),
+          ),
+        );
+      case 'chatsettings':
+        Navigator.of(context).push(
+          SafeRoute<void>(
+            builder: (_) => ChatSettingsScreen(
+              social: social,
+              friendId: 'ayesha',
+              onToggleSos: () {},
+              onCall: (_) {},
+            ),
+          ),
+        );
+      case 'sosbuddies':
+        _openSosBuddies();
+      case 'permissions':
+        Navigator.of(
+          context,
+        ).push(SafeRoute<void>(builder: (_) => const PermissionsScreen()));
+      case 'editprofile':
+        _openEditProfile();
+      case 'privacy':
+        Navigator.of(
+          context,
+        ).push(SafeRoute<void>(builder: (_) => const PrivacyGuideScreen()));
+    }
   }
 
   // --- Auth flow -----------------------------------------------------------
@@ -288,95 +363,6 @@ class _SafeHerShellState extends State<SafeHerShell> {
     return const SizedBox.shrink();
   }
 
-  void _openProfile() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (routeContext) => ListenableBuilder(
-          listenable: Listenable.merge([social, emergency]),
-          builder: (context, _) => Scaffold(
-            appBar: AppBar(title: const Text('Profile')),
-            body: Column(
-              children: [
-                _routeSosBanner(context),
-                Expanded(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 650),
-                      child: ListView(
-                        padding: const EdgeInsets.all(24),
-                        children: [
-                          ProfilePhotoEditor(social: social),
-                          _storageStatus(),
-                          const SizedBox(height: 20),
-                          Text(
-                            social.currentUser.name,
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
-                          const SizedBox(height: 20),
-                          Card(
-                            child: Column(
-                              children: [
-                                ListTile(
-                                  leading: const Icon(Icons.alternate_email),
-                                  title: const Text('Username'),
-                                  subtitle: Text(
-                                    '@${social.currentUser.username}',
-                                  ),
-                                ),
-                                const ListTile(
-                                  leading: Icon(Icons.email_outlined),
-                                  title: Text('Google email'),
-                                  subtitle: Text(
-                                    'Google account not connected',
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          FilledButton.tonalIcon(
-                            onPressed: emergency.status != EmergencyStatus.idle
-                                ? null
-                                : () async {
-                                    try {
-                                      await social.flush();
-                                      shortcut.enable(false);
-                                      await auth.signOut();
-                                      social.signOut();
-                                      await social.flush();
-                                    } catch (_) {
-                                      return;
-                                    }
-                                    if (!routeContext.mounted || !mounted) {
-                                      return;
-                                    }
-                                    Navigator.of(routeContext).pop();
-                                    setState(() {
-                                      _stage = _AuthStage.welcome;
-                                      page = 0;
-                                    });
-                                  },
-                            icon: const Icon(Icons.logout),
-                            label: const Text('Log out'),
-                          ),
-                          if (emergency.status != EmergencyStatus.idle)
-                            const Text(
-                              'Finish or cancel the SOS before logging out.',
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   void _startSos() {
     if (social.eligibleRecipients.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -447,25 +433,27 @@ class _SafeHerShellState extends State<SafeHerShell> {
 
   /// Streams the position into the active SOS until it is stopped.
   void _startTracking(String eventId) {
-    tracker.start((fix) {
-      if (!mounted) return;
-      social.updateSosLocation(
-        eventId,
-        fix.latitude,
-        fix.longitude,
-        fix.time,
-      );
-    }).then((started) {
-      if (!started && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Location is off or not allowed, so your position is not being shared.',
-            ),
-          ),
-        );
-      }
-    });
+    tracker
+        .start((fix) {
+          if (!mounted) return;
+          social.updateSosLocation(
+            eventId,
+            fix.latitude,
+            fix.longitude,
+            fix.time,
+          );
+        })
+        .then((started) {
+          if (!started && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Location is off or not allowed, so your position is not being shared.',
+                ),
+              ),
+            );
+          }
+        });
   }
 
   void _finishSos({required bool cancelled}) {
@@ -510,7 +498,6 @@ class _SafeHerShellState extends State<SafeHerShell> {
       if (!social.signedIn) {
         switch (_stage) {
           case _AuthStage.welcome:
-            return _welcome();
           case _AuthStage.login:
             return LoginScreen(
               onLogin: _handleLogin,
@@ -534,564 +521,200 @@ class _SafeHerShellState extends State<SafeHerShell> {
           onReserve: auth.reserveUsername,
         );
       }
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text(
-            'SafeHer',
-            style: TextStyle(fontWeight: FontWeight.w800),
-          ),
-          actions: [
-            IconButton(
-              tooltip: 'Profile',
-              onPressed: _openProfile,
-              icon: profileAvatar(social, 17),
-            ),
-            const SizedBox(width: 12),
-          ],
-        ),
-        body: Column(
-          children: [
-            _storageStatus(),
-            if (emergency.status != EmergencyStatus.idle &&
-                sosOwner == social.currentUserId &&
-                page != 0)
-              Material(
-                color: Theme.of(context).colorScheme.errorContainer,
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 12,
-                    children: [
-                      Text(
-                        emergency.status == EmergencyStatus.countdown
-                            ? 'SOS starts in ${emergency.remaining}s'
-                            : 'SOS active · not delivered',
+      final ownSos =
+          sosOwner == social.currentUserId &&
+          emergency.status != EmergencyStatus.idle;
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Scaffold(
+            body: Column(
+              children: [
+                _storageStatus(),
+                for (final event in social.visibleEvents.where(
+                  (e) =>
+                      e.senderId != social.currentUserId &&
+                      e.status == LocalSosStatus.active,
+                ))
+                  Material(
+                    color: Theme.of(context).colorScheme.errorContainer,
+                    child: SafeArea(
+                      bottom: false,
+                      child: ListTile(
+                        leading: Icon(Icons.sos, color: AppColors.danger),
+                        title: Text(
+                          'SOS from ${social.person(event.senderId).name}',
+                        ),
+                        subtitle: const Text(
+                          'Location unavailable. Connection required.',
+                        ),
+                        trailing: TextButton(
+                          onPressed: () => setState(() => page = 2),
+                          child: const Text('View'),
+                        ),
                       ),
-                      TextButton(
-                        onPressed: () => _finishSos(cancelled: true),
-                        child: const Text('Cancel SOS'),
-                      ),
-                      TextButton(
-                        onPressed: () => setState(() => page = 0),
-                        child: const Text('View SOS'),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
-            for (final event in social.visibleEvents.where(
-              (e) =>
-                  e.senderId != social.currentUserId &&
-                  e.status == LocalSosStatus.active,
-            ))
-              Material(
-                color: Theme.of(context).colorScheme.errorContainer,
-                child: ListTile(
-                  leading: const Icon(Icons.sos, color: Colors.red),
-                  title: Text('SOS from ${social.person(event.senderId).name}'),
-                  subtitle: const Text(
-                    'Location unavailable. Connection required.',
-                  ),
-                  trailing: TextButton(
-                    onPressed: () => setState(() => page = 2),
-                    child: const Text('View'),
-                  ),
-                ),
-              ),
-            Expanded(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 650),
-                  child: ListView(
-                    padding: _pagePadding(context),
-                    children: [
-                      if (page == 0) ..._home(),
-                      if (page == 1)
-                        ContactsScreen(
+                Expanded(
+                  child: AnimatedSwitcher(
+                    duration: Motion.page,
+                    switchInCurve: Motion.enter,
+                    transitionBuilder: (child, anim) =>
+                        FadeTransition(opacity: anim, child: child),
+                    child: KeyedSubtree(
+                      key: ValueKey(page),
+                      child: switch (page) {
+                        0 => _homePage(),
+                        1 => ContactsScreen(
                           key: ValueKey(social.currentUserId),
                           social: social,
                           safetyBannerBuilder: _routeSosBanner,
                           searchRemote: auth.searchUsers,
                         ),
-                      if (page == 2) ..._history(),
-                      if (page == 3) ..._settings(),
-                      const SizedBox(height: 24),
-                    ],
+                        2 => _historyPage(),
+                        _ => _settingsPage(),
+                      },
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
-        extendBody: true,
-        backgroundColor: Colors.transparent,
-        bottomNavigationBar: _GlassNavBar(
-          selectedIndex: page,
-          onSelected: (value) => setState(() => page = value),
-        ),
+            extendBody: true,
+            backgroundColor: Colors.transparent,
+            bottomNavigationBar: _NavBar(
+              selectedIndex: page,
+              onSelected: (value) => setState(() => page = value),
+            ),
+          ),
+          SosSheet(
+            status: ownSos ? emergency.status : EmergencyStatus.idle,
+            remaining: emergency.remaining,
+            total: emergency.countdownSeconds,
+            recipients: social.eligibleRecipients.map((p) => p.name).toList(),
+            onCancel: () => _finishSos(cancelled: true),
+            onSafe: () => _finishSos(cancelled: false),
+          ),
+        ],
       );
     },
   );
 
-  /// Gutters shrink on narrow phones, and the bottom inset clears the
-  /// floating nav bar (which overlays the body) plus the system gesture area.
-  EdgeInsets _pagePadding(BuildContext context) {
-    final media = MediaQuery.of(context);
-    final side = media.size.width < 360 ? 16.0 : 24.0;
-    return EdgeInsets.fromLTRB(side, 24, side, 24 + 88 + media.padding.bottom);
-  }
+  Widget _avatarButton() => Semantics(
+    button: true,
+    label: 'Edit profile',
+    child: GestureDetector(
+      onTap: _openEditProfile,
+      child: Container(
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: AppColors.light ? Colors.white : AppColors.surface,
+        ),
+        child: profileAvatar(social, 18),
+      ),
+    ),
+  );
 
-  Widget _welcome() {
-    final theme = Theme.of(context);
-    // No scroll, fits every display: the content is laid out at a fixed design
-    // width and scaled down uniformly to fit the available height/width. On a
-    // roomy screen it stays at natural size (scaleDown never enlarges); on a
-    // short screen it shrinks to fit instead of scrolling.
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: Space.x6,
-            vertical: Space.x6,
-          ),
-          child: Center(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: SizedBox(
-                width: 380,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const EntranceFade(child: Center(child: _BrandMark())),
-                    const SizedBox(height: Space.x8),
-                    EntranceFade(
-                      index: 1,
-                      child: Text(
-                        'SafeHer',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.displayLarge,
-                      ),
-                    ),
-                    const SizedBox(height: Space.x2),
-                    EntranceFade(
-                      index: 2,
-                      child: Text(
-                        'One button. The people you chose. Nothing shared until you ask.',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: Space.x12),
-                    _panel(
-                      Icons.people_outline,
-                      'Your trusted circle',
-                      'Choose who can help. Friendship and emergency access are two separate approvals.',
-                      index: 3,
-                    ),
-                    _panel(
-                      Icons.location_on_outlined,
-                      'Share on your terms',
-                      'Location is shared only during an SOS you started. Camera and microphone use always stays visible.',
-                      index: 4,
-                    ),
-                    const SizedBox(height: Space.x8),
-                    EntranceFade(
-                      index: 5,
-                      child: Pressable(
-                        borderRadius: Radii.brSm,
-                        glow: AppColors.accent,
-                        onTap: () => setState(() => _stage = _AuthStage.login),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: Space.x4 + 2,
-                          ),
-                          decoration: BoxDecoration(
-                            borderRadius: Radii.brSm,
-                            gradient: LinearGradient(
-                              colors: [AppColors.accent, AppColors.primary],
-                            ),
-                            border: Border.all(color: AppColors.glassHairline),
-                          ),
-                          child: Text(
-                            'Get started',
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.labelLarge?.copyWith(
-                              color: Colors.white,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: Space.x6),
-                    EntranceFade(
-                      index: 6,
-                      child: Text(
-                        'Your circle. Your choice. Your safety.',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+  void _openEditProfile() {
+    Navigator.of(context).push(
+      SafeRoute<void>(
+        builder: (_) => EditProfileScreen(
+          social: social,
+          safetyBannerBuilder: _routeSosBanner,
         ),
       ),
     );
   }
 
-  List<Widget> _home() {
-    final ownEvent = sosOwner == social.currentUserId;
-    final active = ownEvent && emergency.status == EmergencyStatus.active;
-    final counting = ownEvent && emergency.status == EmergencyStatus.countdown;
-    return [
-      _heading('A little peace of mind.', 'Your trusted circle. One action.'),
-      _panel(
-        Icons.info_outline,
-        'Your safety, one touch away',
-        'Choose the people you trust. Select approved favorite contacts for your SOS.',
-        index: 1,
-      ),
-      const SizedBox(height: Space.x8),
-      EntranceFade(
-        index: 2,
-        child: Center(
-          child: SosButton(
-            status: ownEvent ? emergency.status : EmergencyStatus.idle,
-            remaining: emergency.remaining,
-            countdownSeconds: emergency.countdownSeconds,
-            enabled:
-                emergency.status == EmergencyStatus.idle ||
-                (ownEvent && emergency.status != EmergencyStatus.idle),
-            // One control, both directions: it starts the SOS, and while one is
-            // running it stops it. That mirrors the hidden volume gesture, so
-            // the button and the gesture never disagree about what they do.
-            onTap: emergency.status == EmergencyStatus.idle
-                ? _startSos
-                : ownEvent
-                ? () => _finishSos(cancelled: true)
-                : () {},
-          ),
-        ),
-      ),
-      const SizedBox(height: Space.x6),
-      Text(
-        counting
-            ? 'SOS starts in ${emergency.remaining} seconds'
-            : active
-            ? 'SOS active · not delivered'
-            : emergency.status != EmergencyStatus.idle
-            ? 'Another account has an active SOS'
-            : 'Tap to start an SOS',
-        textAlign: TextAlign.center,
-        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 17),
-      ),
-      if (counting || active) ...[
-        const SizedBox(height: 16),
-        FilledButton.tonal(
-          onPressed: () => _finishSos(cancelled: counting),
-          child: Text(counting ? 'Cancel countdown' : 'I am safe'),
-        ),
-        if (active)
-          TextButton(
-            onPressed: () => _finishSos(cancelled: true),
-            child: const Text('Cancel SOS / false alarm'),
-          ),
-      ],
-      const SizedBox(height: 28),
-      _panel(
-        Icons.people_outline,
-        '${social.eligibleRecipients.length} ready favorite SOS contacts',
-        social.eligibleRecipients.isEmpty
-            ? 'Open Contacts, add a friend, then hold their name for 1.5 seconds to select them for SOS. They must approve.'
-            : 'SOS recipients: ${social.eligibleRecipients.map((p) => p.name).join(', ')}. Other friends will not receive SOS.',
-      ),
-      TextButton.icon(
-        onPressed: () => setState(() => page = 1),
-        icon: const Icon(Icons.people_outline),
-        label: const Text('Manage buddies & SOS favorites'),
-      ),
-      _panel(
-        Icons.location_off_outlined,
-        'Location is not being shared',
-        'Location access is off. Your location is not being shared.',
-      ),
-    ];
+  Future<void> _signOut() async {
+    try {
+      await social.flush();
+      shortcut.enable(false);
+      await auth.signOut();
+      social.signOut();
+      await social.flush();
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _stage = _AuthStage.login;
+      page = 0;
+    });
   }
 
-  List<Widget> _history() => [
-    _heading('Your activity', 'Your SOS history and updates.'),
-    for (final event in social.visibleEvents.reversed)
-      _panel(
-        Icons.sos,
-        '${social.person(event.senderId).name} · ${event.status.name}',
-        '${event.createdAt.toLocal().toString().substring(0, 16)}\nSelected recipients: ${event.recipientIds.map((id) => social.person(id).name).join(', ')}\nDelivery: not connected.',
-      ),
-    if (social.visibleEvents.isEmpty)
-      _panel(
-        Icons.history,
-        'A fresh start',
-        'Your SOS activity will appear here.',
-      ),
-    const SizedBox(height: 16),
-    const Text('History is not synced to an account yet.'),
-  ];
-
-  List<Widget> _settings() => [
-    _heading('Make it yours', 'Understand what your app can do.'),
-    Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Appearance',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            const SizedBox(height: 12),
-            _Segments<ThemeMode>(
-              options: const {
-                ThemeMode.system: 'System',
-                ThemeMode.light: 'Light',
-                ThemeMode.dark: 'Dark',
-              },
-              selected: widget.themeMode,
-              onChanged: (value) => widget.onThemeChanged?.call(value),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'System follows your device appearance, including its automatic schedule.',
-            ),
-          ],
+  Future<void> _confirmSignOut() async {
+    if (emergency.status != EmergencyStatus.idle) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Finish or cancel the SOS first.')),
+      );
+      return;
+    }
+    final yes = await showGeneralDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: const Color(0x73351626),
+      transitionDuration: const Duration(milliseconds: 420),
+      transitionBuilder: (context, anim, _, child) => FadeTransition(
+        opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
+        child: ScaleTransition(
+          scale: Tween(
+            begin: 0.88,
+            end: 1.0,
+          ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutBack)),
+          child: child,
         ),
       ),
-    ),
-    Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'SOS countdown',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            const SizedBox(height: 12),
-            _Segments<int>(
-              options: const {3: '3 sec', 5: '5 sec', 10: '10 sec'},
-              selected: emergency.countdownSeconds,
-              onChanged: (value) => setState(() {
-                emergency.countdownSeconds = value;
-                social.setCountdown(value);
-              }),
-            ),
-          ],
-        ),
-      ),
-    ),
-    _panel(
-      Icons.cloud_off_outlined,
-      'Connection unavailable',
-      'Messages and alerts are not delivered to other devices. Account sync is unavailable.',
-    ),
-    _panel(
-      Icons.videocam_off_outlined,
-      'Media is optional',
-      'You control camera and microphone access. Calls are currently unavailable.',
-    ),
-    ShortcutSettings(shortcut: shortcut, onSelect: social.setShortcutKey),
-    _panel(
-      Icons.privacy_tip_outlined,
-      'Privacy first',
-      'Tap to see exactly what is shared, with whom, and how you stay in control.',
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => const PrivacyGuideScreen()),
-      ),
-    ),
-  ];
-
-  Widget _heading(String title, String subtitle) => EntranceFade(
-    child: Padding(
-      padding: const EdgeInsets.only(bottom: Space.x6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.headlineLarge),
-          const SizedBox(height: Space.x2),
-          Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
-        ],
-      ),
-    ),
-  );
-
-  Widget _panel(
-    IconData icon,
-    String title,
-    String detail, {
-    int index = 0,
-    VoidCallback? onTap,
-  }) => EntranceFade(
-    index: index,
-    child: Padding(
-      padding: const EdgeInsets.only(bottom: Space.x3),
-      child: Pressable(
-        onTap: onTap,
-        child: GlassPanel(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // The icon sits in its own tinted chip so it reads as an object
-              // rather than a glyph floating next to text.
-              Container(
-                padding: const EdgeInsets.all(Space.x2),
-                decoration: BoxDecoration(
-                  borderRadius: Radii.brSm,
-                  color: AppColors.primary.withValues(alpha: 0.18),
-                  border: Border.all(color: AppColors.glassHairline),
-                ),
-                child: Icon(icon, color: AppColors.accent, size: 20),
-              ),
-              const SizedBox(width: Space.x4),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: Space.x1),
-                    Text(detail, style: Theme.of(context).textTheme.bodyMedium),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-/// Floating glass navigation.
-///
-/// It sits over the content (`extendBody: true`) so the aurora keeps running
-/// underneath it — which is the whole reason the blur reads as glass here. The
-/// selected destination animates its pill and tint rather than snapping, so
-/// switching tabs feels like one surface moving instead of four separate icons
-/// toggling.
-class _GlassNavBar extends StatelessWidget {
-  const _GlassNavBar({required this.selectedIndex, required this.onSelected});
-
-  final int selectedIndex;
-  final ValueChanged<int> onSelected;
-
-  static const _items = <({IconData icon, IconData active, String label})>[
-    (icon: Icons.shield_outlined, active: Icons.shield_rounded, label: 'Home'),
-    (
-      icon: Icons.people_outline,
-      active: Icons.people_rounded,
-      label: 'Buddies',
-    ),
-    (icon: Icons.history, active: Icons.history_rounded, label: 'Activity'),
-    (
-      icon: Icons.settings_outlined,
-      active: Icons.settings_rounded,
-      label: 'Settings',
-    ),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(Space.x4, 0, Space.x4, Space.x4),
-        // heightFactor 1.0 is the fix for the nav floating mid-screen: a plain
-        // Center expands to fill the (loose) bottom-bar height and parks the
-        // small glass panel in the middle of it. Wrapping the height to the
-        // child pins the bar to the bottom where it belongs.
-        child: Align(
-          alignment: Alignment.center,
-          heightFactor: 1.0,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: GlassPanel(
-              borderRadius: Radii.brLg,
-              padding: const EdgeInsets.symmetric(
-                horizontal: Space.x2,
-                vertical: Space.x2,
-              ),
-              blur: 26,
-              opacity: 0.70,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      pageBuilder: (dialogContext, _, _) => Center(
+        child: Material(
+          color: AppColors.bg,
+          borderRadius: BorderRadius.circular(28),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 320),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  for (var i = 0; i < _items.length; i++)
-                    Expanded(
-                      child: Pressable(
-                        borderRadius: Radii.brMd,
-                        onTap: () => onSelected(i),
-                        semanticLabel: _items[i].label,
-                        hoverLift: 1,
-                        child: AnimatedContainer(
-                          duration: Motion.standard,
-                          curve: Motion.enter,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: Space.x2,
-                          ),
-                          decoration: BoxDecoration(
-                            borderRadius: Radii.brMd,
-                            color: selectedIndex == i
-                                ? AppColors.primary.withValues(alpha: 0.28)
-                                : Colors.transparent,
-                            border: Border.all(
-                              color: selectedIndex == i
-                                  ? AppColors.glassHairline
-                                  : Colors.transparent,
-                            ),
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              AnimatedScale(
-                                scale: selectedIndex == i ? 1.08 : 1.0,
-                                duration: Motion.standard,
-                                curve: Motion.spring,
-                                child: Icon(
-                                  selectedIndex == i
-                                      ? _items[i].active
-                                      : _items[i].icon,
-                                  size: 22,
-                                  color: selectedIndex == i
-                                      ? AppColors.text
-                                      : AppColors.textMuted,
-                                ),
-                              ),
-                              const SizedBox(height: Space.x1),
-                              Text(
-                                _items[i].label,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  fontSize: 11,
-                                  fontWeight: selectedIndex == i
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
-                                  color: selectedIndex == i
-                                      ? AppColors.text
-                                      : AppColors.textMuted,
-                                ),
-                              ),
-                            ],
-                          ),
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.tint,
+                    ),
+                    child: Icon(Icons.logout_rounded, color: AppColors.accent),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Sign out?',
+                    style: Theme.of(dialogContext).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'You will need your username or email and password to get back in.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(dialogContext).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedPill(
+                          label: 'Stay',
+                          onTap: () => Navigator.of(dialogContext).pop(false),
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: BerryButton(
+                          label: 'Sign out',
+                          onTap: () => Navigator.of(dialogContext).pop(true),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -1099,80 +722,595 @@ class _GlassNavBar extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-/// The shield, lit from within.
-///
-/// The existing purple shield is SafeHer's established mark, so it is preserved
-/// rather than redesigned — it just gains a slow halo so the welcome screen has
-/// one living element instead of a flat glyph.
-class _BrandMark extends StatefulWidget {
-  const _BrandMark();
-
-  @override
-  State<_BrandMark> createState() => _BrandMarkState();
-}
-
-class _BrandMarkState extends State<_BrandMark>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 3200),
-  )..repeat(reverse: true);
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (reduceMotionOf(context) && _controller.isAnimating) {
-      _controller
-        ..stop()
-        ..value = 0.5;
-    }
+    if (yes == true) await _signOut();
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  // --- Home ----------------------------------------------------------------
 
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _controller,
-    builder: (context, _) {
-      final wave = _controller.value;
-      return Container(
-        width: 132,
-        height: 132,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(
-            colors: [
-              AppColors.primary.withValues(alpha: 0.30 + 0.10 * wave),
-              AppColors.primary.withValues(alpha: 0.0),
-            ],
+  Widget _homePage() {
+    final recipients = social.eligibleRecipients;
+    final theme = Theme.of(context);
+    return HeaderPage(
+      animate: false,
+      headerHeight: 300,
+      overlap: 38,
+      lavenderTop: 150,
+      header: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [const Wordmark(), _avatarButton()],
           ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.accent.withValues(alpha: 0.22 + 0.12 * wave),
-              blurRadius: 48,
-              spreadRadius: 4,
+          const SizedBox(height: 22),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 290),
+            child: Text(
+              'Walk tall. Your circle is awake.',
+              style: theme.textTheme.headlineLarge?.copyWith(
+                fontSize: 34,
+                height: 1.08,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 270),
+            child: Text(
+              'One slide tells your trusted buddies where you are.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: AppColors.light
+                    ? const Color(0xFF6A3A52)
+                    : AppColors.textMuted,
+              ),
+            ),
+          ),
+        ],
+      ),
+      children: [
+        SlideToSos(
+          idle: emergency.status == EmergencyStatus.idle,
+          onComplete: _startSos,
+        ),
+        const SizedBox(height: 26),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Your SOS buddies',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            GestureDetector(
+              onTap: _openSosBuddies,
+              child: Text(
+                'Manage',
+                style: TextStyle(
+                  color: AppColors.accent,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
             ),
           ],
         ),
-        child: Icon(
-          Icons.shield_rounded,
-          size: 76,
-          color: Color.lerp(AppColors.accent, AppColors.text, 0.25 * wave),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            for (var i = 0; i < 4; i++) ...[
+              Expanded(
+                child: i < recipients.length && i < 3
+                    ? _buddyTile(recipients[i].name, i)
+                    : i == (recipients.length < 3 ? recipients.length : 3)
+                    ? _addTile(
+                        recipients.length > 3
+                            ? '+${recipients.length - 3}'
+                            : null,
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              if (i < 3) const SizedBox(width: 10),
+            ],
+          ],
         ),
-      );
-    },
+        const SizedBox(height: 18),
+        Row(
+          children: [
+            Expanded(
+              child: _statusCard(
+                'Location',
+                'Ready',
+                AppColors.light ? const Color(0xFFE4F2E9) : AppColors.tint,
+                dot: AppColors.success,
+                titleColor: AppColors.light ? const Color(0xFF3F6B52) : null,
+                textColor: AppColors.light ? const Color(0xFF1E4A33) : null,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _statusCard(
+                'Buddies',
+                '${recipients.length} of ${SocialController.maxSosBuddies} approved',
+                AppColors.light ? const Color(0xFFEFE3F6) : AppColors.tint,
+                titleColor: AppColors.light ? const Color(0xFF6B4A83) : null,
+                textColor: AppColors.light ? const Color(0xFF3F2257) : null,
+              ),
+            ),
+          ],
+        ),
+        if (recipients.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 14),
+            child: _note(
+              'No SOS buddies are ready. Open Buddies, add a friend, then star them in their chat menu. They must approve.',
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buddyTile(String name, int index) => Container(
+    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(18),
+      color: AppColors.surface,
+      border: Border.all(color: AppColors.border),
+    ),
+    child: Column(
+      children: [
+        AvatarDot(name: name, color: avatarByIndex(index)),
+        const SizedBox(height: 8),
+        Text(
+          name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+      ],
+    ),
   );
+
+  Widget _addTile(String? more) => Pressable(
+    borderRadius: BorderRadius.circular(18),
+    onTap: _openSosBuddies,
+    semanticLabel: 'Add SOS buddy',
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        color: AppColors.light ? const Color(0xFFFFEDE5) : AppColors.tint,
+      ),
+      foregroundDecoration: DashedBorder(
+        color: AppColors.light ? const Color(0xFFD98B73) : AppColors.border,
+        radius: 18,
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.surface,
+            ),
+            child: Text(
+              more ?? '+',
+              style: TextStyle(
+                fontSize: more == null ? 22 : 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.light
+                    ? const Color(0xFF8C3A1E)
+                    : AppColors.text,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            more == null ? 'Add' : 'More',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.light ? const Color(0xFF8C3A1E) : AppColors.text,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _statusCard(
+    String title,
+    String text,
+    Color bg, {
+    Color? dot,
+    Color? titleColor,
+    Color? textColor,
+  }) => Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(18),
+      color: bg,
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: titleColor ?? AppColors.textMuted,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Row(
+          children: [
+            if (dot != null) ...[
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: dot),
+              ),
+              const SizedBox(width: 7),
+            ],
+            Flexible(
+              child: Text(
+                text,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: textColor ?? AppColors.text,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+  Widget _note(String text) => Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(18),
+      color: AppColors.tint,
+    ),
+    child: Text(
+      text,
+      style: TextStyle(fontSize: 13, height: 1.55, color: AppColors.textMuted),
+    ),
+  );
+
+  void _openSosBuddies() => Navigator.of(context).push(
+    SafeRoute<void>(
+      builder: (_) => SosBuddiesScreen(
+        social: social,
+        onAdd: () {
+          Navigator.of(context).pop();
+          setState(() => page = 1);
+        },
+      ),
+    ),
+  );
+
+  // --- Activity ------------------------------------------------------------
+
+  Widget _historyPage() {
+    final events = social.visibleEvents.reversed.toList();
+    return HeaderPage(
+      animate: false,
+      headerHeight: 190,
+      overlap: 26,
+      header: const HeaderTitle(
+        'Activity',
+        subtitle: 'Your SOS history, kept private.',
+      ),
+      children: [
+        Row(
+          children: [
+            PillButton(label: 'All', filled: true),
+            const SizedBox(width: 8),
+            PillButton(
+              label: 'SOS',
+              tone: (AppColors.surface, AppColors.textMuted),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        for (final event in events)
+          RowCard(
+            leading: const IconChip(Icons.shield_outlined),
+            title:
+                '${social.person(event.senderId).name} · ${event.status.name}',
+            detail:
+                '${event.createdAt.toLocal().toString().substring(0, 16)} · ${event.recipientIds.map((id) => social.person(id).name).join(', ')}',
+            trailing: event.lastLat == null
+                ? null
+                : Icon(Icons.place_rounded, color: AppColors.accent, size: 20),
+          ),
+        if (events.isEmpty)
+          RowCard(
+            leading: const IconChip(Icons.history),
+            title: 'A fresh start',
+            detail: 'Your SOS activity will appear here.',
+          ),
+        const SizedBox(height: 8),
+        _note('History is not synced to an account yet.'),
+      ],
+    );
+  }
+
+  // --- Settings ------------------------------------------------------------
+
+  Widget _settingsPage() {
+    final theme = Theme.of(context);
+    return HeaderPage(
+      animate: false,
+      headerHeight: 190,
+      overlap: 72,
+      header: const HeaderTitle('Settings'),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            color: AppColors.surface,
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.primary, width: 2),
+                ),
+                child: profileAvatar(social, 26),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      social.currentUser.name,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      '@${social.currentUser.username}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              PillButton(label: 'Edit photo', onTap: _openEditProfile),
+            ],
+          ),
+        ),
+        const SectionLabel('Appearance'),
+        _Segments<ThemeMode>(
+          options: const {
+            ThemeMode.system: 'System',
+            ThemeMode.light: 'Light',
+            ThemeMode.dark: 'Dark',
+          },
+          selected: widget.themeMode,
+          onChanged: (value) => widget.onThemeChanged?.call(value),
+        ),
+        const SectionLabel('Safety'),
+        RowCard(
+          leading: const IconChip(Icons.verified_user_outlined),
+          title: 'Privacy first',
+          detail: 'What is shared, and who decides',
+          trailing: _chevron(),
+          onTap: () => Navigator.of(
+            context,
+          ).push(SafeRoute<void>(builder: (_) => const PrivacyGuideScreen())),
+        ),
+        RowCard(
+          leading: const IconChip(Icons.star_outline_rounded),
+          title: 'Manage SOS buddies',
+          detail:
+              '${social.eligibleRecipients.length} of ${SocialController.maxSosBuddies} approved',
+          trailing: _chevron(),
+          onTap: _openSosBuddies,
+        ),
+        ListenableBuilder(
+          listenable: shortcut,
+          builder: (context, _) => RowCard(
+            leading: const IconChip(Icons.smartphone_rounded),
+            title: 'Volume key shortcut',
+            detail: 'Double press to start an SOS',
+            onTap: _openSosSettings,
+            trailing: SoftSwitch(
+              value: shortcut.enabled,
+              label: 'Volume key shortcut',
+              onChanged: shortcut.supported && shortcut.tested
+                  ? shortcut.enable
+                  : (_) => _openSosSettings(),
+            ),
+          ),
+        ),
+        RowCard(
+          leading: const IconChip(Icons.logout_rounded),
+          title: 'Sign out',
+          onTap: _confirmSignOut,
+        ),
+        const SizedBox(height: 6),
+        _note(
+          'Messages and alerts are not delivered to other devices yet. Calling is unavailable.',
+        ),
+      ],
+    );
+  }
+
+  /// Detail sheet behind the volume-key row: which key, testing it, how long
+  /// the countdown is, and the permissions screen.
+  void _openSosSettings() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(22, 0, 22, 22),
+          child: ListenableBuilder(
+            listenable: emergency,
+            builder: (context, _) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'SOS settings',
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+                const SizedBox(height: 14),
+                ShortcutSettings(
+                  shortcut: shortcut,
+                  onSelect: social.setShortcutKey,
+                ),
+                const SectionLabel('SOS countdown'),
+                _Segments<int>(
+                  options: const {3: '3 sec', 5: '5 sec', 10: '10 sec'},
+                  selected: emergency.countdownSeconds,
+                  onChanged: (value) {
+                    emergency.countdownSeconds = value;
+                    social.setCountdown(value);
+                    setState(() {});
+                  },
+                ),
+                const SizedBox(height: 14),
+                RowCard(
+                  leading: const IconChip(Icons.tune_rounded),
+                  title: 'Permissions',
+                  detail: 'Location, camera, microphone',
+                  trailing: _chevron(),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    Navigator.of(context).push(
+                      SafeRoute<void>(
+                        builder: (_) => const PermissionsScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _chevron() =>
+      Icon(Icons.chevron_right_rounded, color: AppColors.textMuted);
 }
 
-/// A segmented control with equal-width options. Labels are single-line and
-/// scale down, so they never wrap on narrow phones.
+/// Floating bottom navigation: a solid pill in the baby pink design, glass in
+/// dark. The selected destination slides its pill rather than snapping.
+class _NavBar extends StatelessWidget {
+  const _NavBar({required this.selectedIndex, required this.onSelected});
+
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+
+  static const _items = <({IconData icon, String label})>[
+    (icon: Icons.shield_outlined, label: 'Home'),
+    (icon: Icons.people_outline, label: 'Buddies'),
+    (icon: Icons.history, label: 'Activity'),
+    (icon: Icons.settings_outlined, label: 'Settings'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final idle = AppColors.light
+        ? const Color(0xFF7A5568)
+        : AppColors.textMuted;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+        child: Align(
+          alignment: Alignment.center,
+          heightFactor: 1.0,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: GlassPanel(
+              borderRadius: BorderRadius.circular(26),
+              padding: EdgeInsets.zero,
+              blur: 26,
+              opacity: 0.70,
+              child: SizedBox(
+                height: 70,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    for (var i = 0; i < _items.length; i++)
+                      Pressable(
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: () => onSelected(i),
+                        semanticLabel: _items[i].label,
+                        hoverLift: 1,
+                        child: AnimatedContainer(
+                          duration: Motion.standard,
+                          curve: Motion.enter,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 9,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(18),
+                            color: selectedIndex == i
+                                ? (AppColors.light
+                                      ? AppColors.secondary
+                                      : AppColors.primary.withValues(
+                                          alpha: 0.28,
+                                        ))
+                                : Colors.transparent,
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _items[i].icon,
+                                size: 22,
+                                color: selectedIndex == i
+                                    ? AppColors.onHeader
+                                    : idle,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _items[i].label,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: selectedIndex == i
+                                      ? AppColors.onHeader
+                                      : idle,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A segmented control whose selected pill slides between options.
 class _Segments<T> extends StatelessWidget {
   const _Segments({
     required this.options,
@@ -1184,51 +1322,80 @@ class _Segments<T> extends StatelessWidget {
   final ValueChanged<T> onChanged;
 
   @override
-  Widget build(BuildContext context) => Container(
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(999),
-      border: Border.all(color: AppColors.border),
-    ),
-    child: Row(
-      children: [
-        for (final entry in options.entries)
-          Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => onChanged(entry.key),
-              child: Semantics(
-                button: true,
-                selected: entry.key == selected,
-                label: entry.value,
-                child: Container(
-                  height: 44,
-                  alignment: Alignment.center,
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(999),
-                    color: entry.key == selected
-                        ? AppColors.accent
-                        : Colors.transparent,
-                  ),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      entry.value,
-                      maxLines: 1,
-                      softWrap: false,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: entry.key == selected
-                            ? Colors.black
-                            : AppColors.text,
-                      ),
+  Widget build(BuildContext context) {
+    final keys = options.keys.toList();
+    final index = keys.indexOf(selected).clamp(0, keys.length - 1);
+    return Container(
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.border),
+      ),
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final w = box.maxWidth / keys.length;
+          return SizedBox(
+            height: 42,
+            child: Stack(
+              children: [
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 420),
+                  curve: Curves.easeOutBack,
+                  left: w * index,
+                  top: 0,
+                  bottom: 0,
+                  width: w,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      color: AppColors.light
+                          ? AppColors.secondary
+                          : AppColors.primary.withValues(alpha: 0.35),
                     ),
                   ),
                 ),
-              ),
+                Row(
+                  children: [
+                    for (final entry in options.entries)
+                      Expanded(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => onChanged(entry.key),
+                          child: Semantics(
+                            button: true,
+                            selected: entry.key == selected,
+                            label: entry.value,
+                            child: Center(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: AnimatedDefaultTextStyle(
+                                  duration: Motion.standard,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                    color: entry.key == selected
+                                        ? AppColors.onHeader
+                                        : AppColors.textMuted,
+                                  ),
+                                  child: Text(
+                                    entry.value,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
             ),
-          ),
-      ],
-    ),
-  );
+          );
+        },
+      ),
+    );
+  }
 }

@@ -3,8 +3,10 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'chat_screen.dart';
 import 'social_controller.dart';
+import 'theme/tokens.dart';
+import 'ui/design.dart';
 
-/// A deliberate 1500ms gesture, with a keyboard/screen-reader menu alternative.
+/// A buddy row. A deliberate 1500ms hold (or the star) opens SOS options.
 class FriendContactTile extends StatelessWidget {
   const FriendContactTile({
     super.key,
@@ -31,29 +33,27 @@ class FriendContactTile extends StatelessWidget {
             (recognizer) => recognizer.onLongPress = onOptions,
           ),
     },
-    child: Card(
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        onTap: onOpenChat,
-        leading: CircleAvatar(child: Text(name.substring(0, 1))),
-        title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(subtitle),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (favorite)
-              const Icon(
-                Icons.star_rounded,
-                color: Color(0xFFAE7900),
-                semanticLabel: 'Favorite SOS contact',
-              ),
-            IconButton(
-              tooltip: 'Contact options for $name',
-              onPressed: onOptions,
-              icon: const Icon(Icons.more_vert),
+    child: RowCard(
+      leading: AvatarDot(name: name),
+      title: name,
+      detail: subtitle,
+      onTap: onOpenChat,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (favorite)
+            Icon(
+              Icons.star_rounded,
+              color: AppColors.primary,
+              size: 22,
+              semanticLabel: 'SOS buddy',
             ),
-          ],
-        ),
+          IconButton(
+            tooltip: 'Options for $name',
+            onPressed: onOptions,
+            icon: Icon(Icons.more_vert, color: AppColors.textMuted),
+          ),
+        ],
       ),
     ),
   );
@@ -77,9 +77,16 @@ class ContactsScreen extends StatefulWidget {
 
 class _ContactsScreenState extends State<ContactsScreen> {
   String query = '';
+  final _searchController = TextEditingController();
   List<RemoteProfile> _remote = [];
   int _searchToken = 0;
   SocialController get social => widget.social;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   Future<void> _onQuery(String value) async {
     setState(() => query = value);
@@ -110,6 +117,16 @@ class _ContactsScreenState extends State<ContactsScreen> {
     }
   }
 
+  void _openChat(String friendId) => Navigator.of(context).push(
+    SafeRoute<void>(
+      builder: (_) => ChatScreen(
+        social: social,
+        friendId: friendId,
+        safetyBannerBuilder: widget.safetyBannerBuilder,
+      ),
+    ),
+  );
+
   void _options(DemoPerson friend) {
     showModalBottomSheet<void>(
       context: context,
@@ -123,25 +140,24 @@ class _ContactsScreenState extends State<ContactsScreen> {
             children: [
               Text(
                 friend.name,
-                style: Theme.of(context).textTheme.headlineSmall,
+                style: Theme.of(context).textTheme.headlineMedium,
               ),
               const SizedBox(height: 8),
               Text(
                 social.isFavorite(friend.id)
                     ? 'Remove this person to stop including them in your SOS recipients.'
-                    : 'Only favorite contacts who approve SOS access receive your alerts. Friendship alone does not share your location.',
+                    : 'Only SOS buddies who approve receive your alerts. Being a buddy alone does not share your location.',
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 20),
-              FilledButton.icon(
-                icon: Icon(
-                  social.isFavorite(friend.id) ? Icons.star_border : Icons.star,
-                ),
-                label: Text(
-                  social.isFavorite(friend.id)
-                      ? 'Remove from favorite SOS contacts'
-                      : 'Add to favorite SOS contact',
-                ),
-                onPressed: () {
+              BerryButton(
+                icon: social.isFavorite(friend.id)
+                    ? Icons.star_border
+                    : Icons.star,
+                label: social.isFavorite(friend.id)
+                    ? 'Remove from SOS buddies'
+                    : 'Add to SOS buddies',
+                onTap: () {
                   Navigator.pop(sheetContext);
                   _action(
                     () => social.isFavorite(friend.id)
@@ -165,7 +181,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
                   Navigator.pop(sheetContext);
                   _action(() => social.removeFriend(friend.id));
                 },
-                child: const Text('Remove friend'),
+                child: const Text('Remove buddy'),
               ),
             ],
           ),
@@ -187,136 +203,100 @@ class _ContactsScreenState extends State<ContactsScreen> {
               !known.contains(r.username.toLowerCase()))
             DemoPerson(id: r.uid, name: r.username, username: r.username),
       ];
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      return HeaderPage(
+        animate: false,
+        headerHeight: 190,
+        overlap: 30,
+        header: const HeaderTitle(
+          'Buddies',
+          subtitle: 'Find people by username. Tap a buddy to chat.',
+        ),
         children: [
-          Text(
-            'Buddies',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Tap a buddy to chat. Hold for 1.5 seconds to choose favorite SOS contacts, or use the three-dot menu.',
-          ),
-          const SizedBox(height: 20),
-          TextField(
+          DesignField(
             key: ValueKey('search-${social.currentUserId}'),
-            decoration: const InputDecoration(
-              labelText: 'Find by username',
-              hintText: 'Enter a username',
-              prefixIcon: Icon(Icons.search),
-              border: OutlineInputBorder(),
-            ),
+            controller: _searchController,
+            hint: 'Find by username',
+            icon: Icons.search,
+            pill: true,
+            shadow: true,
             onChanged: _onQuery,
           ),
           if (query.trim().isNotEmpty) ...[
-            const SizedBox(height: 12),
-            if (results.isEmpty) const Text('No matching user.'),
-            for (final person in results)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 12,
-                    runSpacing: 8,
-                    children: [
-                      Text('${person.name}  @${person.username}'),
-                      if (social.areFriends(social.currentUserId, person.id))
-                        FilledButton.tonalIcon(
-                          onPressed: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => ChatScreen(
-                                social: social,
-                                friendId: person.id,
-                                safetyBannerBuilder: widget.safetyBannerBuilder,
-                              ),
-                            ),
-                          ),
-                          icon: const Icon(Icons.chat_bubble_outline, size: 18),
-                          label: const Text('Message'),
-                        )
-                      else if (social.pendingOutgoing.any(
-                        (r) => r.toId == person.id,
-                      ))
-                        OutlinedButton.icon(
-                          onPressed: () => _action(() {
-                            final sent = social.pendingOutgoing.firstWhere(
-                              (r) => r.toId == person.id,
-                            );
-                            social.cancelFriendRequest(sent.id);
-                          }),
-                          icon: const Icon(Icons.schedule, size: 18),
-                          label: const Text('Requested'),
-                        )
-                      else if (social.pendingIncoming.any(
-                        (r) => r.fromId == person.id,
-                      ))
-                        const Chip(label: Text('Request received'))
-                      else
-                        FilledButton.tonal(
-                          onPressed: () => _action(() {
-                            social.adoptRemote(person.id, person.username);
-                            social.requestFriend(person.id);
-                          }),
-                          child: const Text('Add buddy'),
-                        ),
-                    ],
-                  ),
+            const SectionLabel('Search results'),
+            if (results.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: Text(
+                  'No matching user.',
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
+            for (final person in results) _resultRow(person),
           ],
-          if (social.pendingIncoming.isNotEmpty) _section('Friend requests'),
+          if (social.pendingIncoming.isNotEmpty)
+            const SectionLabel('Buddy requests'),
           for (final request in social.pendingIncoming)
-            _request(
-              '${social.person(request.fromId).name} wants to be friends',
-              'Friendship opens chat. SOS access is a separate choice.',
-              [
-                TextButton(
-                  onPressed: () => _action(
-                    () => social.respondToFriendRequest(request.id, false),
+            RowCard(
+              leading: AvatarDot(name: social.person(request.fromId).name),
+              title: '@${social.person(request.fromId).username}',
+              detail: 'wants to be your buddy',
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  PillButton(
+                    label: 'Accept',
+                    filled: true,
+                    onTap: () => _action(
+                      () => social.respondToFriendRequest(request.id, true),
+                    ),
                   ),
-                  child: const Text('Decline'),
-                ),
-                FilledButton(
-                  onPressed: () => _action(
-                    () => social.respondToFriendRequest(request.id, true),
+                  const SizedBox(width: 6),
+                  PillButton(
+                    label: 'Decline',
+                    tone: (AppColors.surface, AppColors.textMuted),
+                    onTap: () => _action(
+                      () => social.respondToFriendRequest(request.id, false),
+                    ),
                   ),
-                  child: const Text('Accept'),
-                ),
-              ],
+                ],
+              ),
             ),
           if (social.incomingSosRequests.isNotEmpty)
-            _section('SOS contact approval'),
+            const SectionLabel('SOS approval'),
           for (final request in social.incomingSosRequests)
-            _request(
-              '${social.person(request.senderId).name} chose you for SOS',
-              'Approve to receive their SOS alerts. You can revoke this any time.',
-              [
-                TextButton(
-                  onPressed: () => _action(
-                    () => social.respondToSosRequest(request.senderId, false),
+            RowCard(
+              leading: AvatarDot(name: social.person(request.senderId).name),
+              title: '${social.person(request.senderId).name} chose you',
+              detail: 'Approve to receive their SOS. You can revoke any time.',
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  PillButton(
+                    label: 'Approve',
+                    filled: true,
+                    onTap: () => _action(
+                      () => social.respondToSosRequest(request.senderId, true),
+                    ),
                   ),
-                  child: const Text('Decline SOS'),
-                ),
-                FilledButton(
-                  onPressed: () => _action(
-                    () => social.respondToSosRequest(request.senderId, true),
+                  const SizedBox(width: 6),
+                  PillButton(
+                    label: 'Decline',
+                    tone: (AppColors.surface, AppColors.textMuted),
+                    onTap: () => _action(
+                      () => social.respondToSosRequest(request.senderId, false),
+                    ),
                   ),
-                  child: const Text('Approve SOS'),
-                ),
-              ],
+                ],
+              ),
             ),
-          _section('Your friends (${social.friends.length})'),
+          SectionLabel('Your buddies (${social.friends.length})'),
           if (social.friends.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(20),
+            Padding(
+              padding: const EdgeInsets.all(20),
               child: Text(
                 'Your circle starts here. Search a username and send your first request.',
                 textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
           for (final friend in social.friends)
@@ -324,70 +304,79 @@ class _ContactsScreenState extends State<ContactsScreen> {
               key: ValueKey('friend-${friend.id}'),
               name: friend.name,
               subtitle: social.isApprovedFavorite(friend.id)
-                  ? 'Favorite SOS contact · approved'
+                  ? 'SOS buddy · approved'
                   : social.isFavorite(friend.id)
                   ? social.hasPendingSosRequest(friend.id)
-                        ? 'Favorite SOS contact · awaiting approval'
-                        : 'Favorite SOS contact · approval needed'
+                        ? 'SOS buddy · awaiting approval'
+                        : 'SOS buddy · approval needed'
                   : '@${friend.username} · Tap to chat',
               favorite: social.isFavorite(friend.id),
-              onOpenChat: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => ChatScreen(
-                    social: social,
-                    friendId: friend.id,
-                    safetyBannerBuilder: widget.safetyBannerBuilder,
-                  ),
-                ),
-              ),
+              onOpenChat: () => _openChat(friend.id),
               onOptions: () => _options(friend),
             ),
           if (social.approvedSenders.isNotEmpty)
-            _section('People whose SOS you receive'),
+            const SectionLabel('People whose SOS you receive'),
           for (final person in social.approvedSenders)
-            _request(
-              '${person.name} can send you SOS alerts',
-              'Revoke to stop receiving their SOS and remove access to their active events.',
-              [
-                TextButton(
-                  onPressed: () =>
-                      _action(() => social.revokeSosPermission(person.id)),
-                  child: const Text('Revoke SOS approval'),
-                ),
-              ],
+            RowCard(
+              leading: AvatarDot(name: person.name),
+              title: '${person.name} can send you SOS',
+              detail: 'Revoke to stop receiving their alerts.',
+              trailing: PillButton(
+                label: 'Revoke',
+                onTap: () =>
+                    _action(() => social.revokeSosPermission(person.id)),
+              ),
             ),
-          const SizedBox(height: 16),
-          Text(
-            'Manage SOS access through your approved favorite contacts.',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
         ],
       );
     },
   );
 
-  Widget _section(String title) => Padding(
-    padding: const EdgeInsets.only(top: 24, bottom: 8),
-    child: Text(
-      title,
-      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-    ),
-  );
-  Widget _request(String title, String detail, List<Widget> actions) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 6),
-          Text(detail),
-          const SizedBox(height: 10),
-          Wrap(alignment: WrapAlignment.end, spacing: 8, children: actions),
-        ],
+  /// One search result: the state sits beside the username (Message,
+  /// Requested, Add buddy), like the rest of the app's rows.
+  Widget _resultRow(DemoPerson person) {
+    final Widget action;
+    final String detail;
+    if (social.areFriends(social.currentUserId, person.id)) {
+      detail = 'Buddy';
+      action = PillButton(label: 'Message', onTap: () => _openChat(person.id));
+    } else if (social.pendingOutgoing.any((r) => r.toId == person.id)) {
+      detail = 'Request sent';
+      action = PillButton(
+        label: 'Requested',
+        tone: (
+          AppColors.light ? const Color(0xFFFFEDE5) : AppColors.tint,
+          AppColors.light ? const Color(0xFF8C3A1E) : AppColors.text,
+        ),
+        onTap: () => _action(() {
+          final sent = social.pendingOutgoing.firstWhere(
+            (r) => r.toId == person.id,
+          );
+          social.cancelFriendRequest(sent.id);
+        }),
+      );
+    } else if (social.pendingIncoming.any((r) => r.fromId == person.id)) {
+      detail = 'Sent you a request';
+      action = const PillButton(label: 'Request received');
+    } else {
+      detail = 'Not a buddy yet';
+      action = PillButton(
+        label: 'Add buddy',
+        filled: true,
+        onTap: () => _action(() {
+          social.adoptRemote(person.id, person.username);
+          social.requestFriend(person.id);
+        }),
+      );
+    }
+    return RowCard(
+      leading: AvatarDot(name: person.name),
+      title: '@${person.username}',
+      detail: detail,
+      trailing: AnimatedSwitcher(
+        duration: Motion.standard,
+        child: KeyedSubtree(key: ValueKey(detail), child: action),
       ),
-    ),
-  );
+    );
+  }
 }

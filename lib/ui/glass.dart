@@ -39,6 +39,32 @@ class GlassPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The light (baby pink) design uses plain solid cards with a hairline;
+    // blur is only meaningful over the dark aurora.
+    if (AppColors.light) {
+      final card = DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: borderRadius,
+          color: AppColors.surface,
+          border: Border.all(color: borderColor ?? AppColors.border),
+        ),
+        child: Padding(padding: padding, child: child),
+      );
+      if (glow == null) return card;
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: borderRadius,
+          boxShadow: [
+            BoxShadow(
+              color: glow!.withValues(alpha: 0.18),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: card,
+      );
+    }
     final panel = ClipRRect(
       borderRadius: borderRadius,
       child: BackdropFilter(
