@@ -226,11 +226,32 @@ class _ContactsScreenState extends State<ContactsScreen> {
                     children: [
                       Text('${person.name}  @${person.username}'),
                       if (social.areFriends(social.currentUserId, person.id))
-                        const Chip(label: Text('Friend'))
+                        FilledButton.tonalIcon(
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => ChatScreen(
+                                social: social,
+                                friendId: person.id,
+                                safetyBannerBuilder: widget.safetyBannerBuilder,
+                              ),
+                            ),
+                          ),
+                          icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                          label: const Text('Message'),
+                        )
                       else if (social.pendingOutgoing.any(
                         (r) => r.toId == person.id,
                       ))
-                        const Chip(label: Text('Request sent'))
+                        OutlinedButton.icon(
+                          onPressed: () => _action(() {
+                            final sent = social.pendingOutgoing.firstWhere(
+                              (r) => r.toId == person.id,
+                            );
+                            social.cancelFriendRequest(sent.id);
+                          }),
+                          icon: const Icon(Icons.schedule, size: 18),
+                          label: const Text('Requested'),
+                        )
                       else if (social.pendingIncoming.any(
                         (r) => r.fromId == person.id,
                       ))
@@ -241,7 +262,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
                             social.adoptRemote(person.id, person.username);
                             social.requestFriend(person.id);
                           }),
-                          child: const Text('Send request'),
+                          child: const Text('Add buddy'),
                         ),
                     ],
                   ),
@@ -265,19 +286,6 @@ class _ContactsScreenState extends State<ContactsScreen> {
                     () => social.respondToFriendRequest(request.id, true),
                   ),
                   child: const Text('Accept'),
-                ),
-              ],
-            ),
-          if (social.pendingOutgoing.isNotEmpty) _section('Sent requests'),
-          for (final request in social.pendingOutgoing)
-            _request(
-              'Waiting for ${social.person(request.toId).name}',
-              'Your friend request is awaiting a response.',
-              [
-                TextButton(
-                  onPressed: () =>
-                      _action(() => social.cancelFriendRequest(request.id)),
-                  child: const Text('Cancel request'),
                 ),
               ],
             ),
