@@ -79,7 +79,13 @@ class SocialController extends ChangeNotifier {
   }
   SocialController.authenticated({required String uid, required String name}) {
     _profiles.clear();
-    _profiles.add(DemoPerson(id: uid, name: name.isEmpty ? 'SafeHer user' : name, username: ''));
+    _profiles.add(
+      DemoPerson(
+        id: uid,
+        name: name.isEmpty ? 'SafeHer user' : name,
+        username: '',
+      ),
+    );
     _currentUserId = uid;
     signedIn = true;
     _lockedIdentity = true;
@@ -350,6 +356,7 @@ class SocialController extends ChangeNotifier {
       (p) => p.id != currentUserId && areFriends(currentUserId, p.id),
     ),
   );
+
   /// Adds an account found through cloud search so it can be requested,
   /// reusing the existing entry when it is already known.
   DemoPerson adoptRemote(String id, String username) {
@@ -448,9 +455,37 @@ class SocialController extends ChangeNotifier {
       areFriends(sender, recipient) &&
       _favorites.contains(_directed(sender, recipient)) &&
       _approved.contains(_directed(sender, recipient));
+
+  /// Preview helper for local mode: makes [friendId] a buddy with a first
+  /// message so the chat screen has something to show. Never used with cloud
+  /// accounts.
+  void seedDemoFriend(String friendId) {
+    if (friendId == currentUserId) return;
+    if (areFriends(currentUserId, friendId)) return;
+    _friendships.add(_pair(currentUserId, friendId));
+    _messages.add(
+      ChatMessage(
+        id: _id(),
+        senderId: friendId,
+        recipientId: currentUserId,
+        text: 'Hi! Welcome to SafeHer 👋',
+        createdAt: DateTime.now(),
+      ),
+    );
+    notifyListeners();
+  }
+
+  /// How many buddies can receive one SOS at the same time.
+  static const maxSosBuddies = 5;
+
+  int get sosBuddyCount => profiles.where((p) => isFavorite(p.id)).length;
+
   void favorite(String friendId) {
     _requireFriend(friendId);
     final key = _directed(currentUserId, friendId);
+    if (!_favorites.contains(key) && sosBuddyCount >= maxSosBuddies) {
+      throw StateError('You can connect up to $maxSosBuddies SOS buddies.');
+    }
     _favorites.add(key);
     if (!_approved.contains(key)) _pendingConsent.add(key);
     notifyListeners();

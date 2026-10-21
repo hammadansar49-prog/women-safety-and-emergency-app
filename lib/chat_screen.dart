@@ -60,6 +60,30 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// Connects or disconnects this buddy from SOS. Up to five buddies can be
+  /// connected at once; an SOS goes to every connected buddy who approved it.
+  void _toggleSosBuddy() {
+    final social = widget.social;
+    final id = widget.friendId;
+    String message;
+    try {
+      if (social.isFavorite(id)) {
+        social.unfavorite(id);
+        message = 'Removed from your SOS buddies.';
+      } else {
+        social.favorite(id);
+        message = social.isApprovedFavorite(id)
+            ? 'Connected as an SOS buddy.'
+            : 'SOS buddy request sent. They must approve before they receive your SOS.';
+      }
+    } on StateError catch (e) {
+      message = e.message;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   void _call(bool video) {
     if (!_available) return;
     Navigator.of(context).push(
@@ -97,6 +121,35 @@ class _ChatScreenState extends State<ChatScreen> {
             ],
           ),
           actions: [
+            if (available)
+              PopupMenuButton<String>(
+                tooltip: 'More',
+                onSelected: (_) => _toggleSosBuddy(),
+                itemBuilder: (_) {
+                  final on = widget.social.isFavorite(widget.friendId);
+                  return [
+                    PopupMenuItem<String>(
+                      value: 'sos',
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              on
+                                  ? 'Remove from SOS buddies'
+                                  : 'Add to SOS buddies',
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Icon(
+                            on ? Icons.star : Icons.star_border,
+                            color: on ? Colors.amber : null,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ];
+                },
+              ),
             IconButton(
               tooltip: 'Audio call',
               onPressed: available ? () => _call(false) : null,

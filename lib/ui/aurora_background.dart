@@ -59,7 +59,7 @@ class _AuroraBackgroundState extends State<AuroraBackground>
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
-      decoration: const BoxDecoration(color: AppColors.bg),
+      decoration: BoxDecoration(color: AppColors.bg),
       child: Stack(
         children: [
           Positioned.fill(
@@ -80,7 +80,7 @@ class _AuroraBackgroundState extends State<AuroraBackground>
 }
 
 class _Orb {
-  const _Orb({
+  _Orb({
     required this.color,
     required this.anchor,
     required this.drift,
@@ -102,7 +102,7 @@ class _AuroraPainter extends CustomPainter {
 
   // Violet -> magenta, straight off the locked palette. Opacities stay low:
   // this is atmosphere, not a feature, and the text above it must stay legible.
-  static const _orbs = <_Orb>[
+  static List<_Orb> get _orbs => <_Orb>[
     _Orb(
       color: AppColors.primary,
       anchor: Alignment(-0.75, -0.85),

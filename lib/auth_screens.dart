@@ -100,7 +100,7 @@ class _PrimaryButton extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: Space.x4 + 2),
       decoration: BoxDecoration(
         borderRadius: Radii.brSm,
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           colors: [AppColors.accent, AppColors.primary],
         ),
         border: Border.all(color: AppColors.glassHairline),
@@ -194,7 +194,7 @@ Widget _authHeader(BuildContext context, String title, String subtitle) {
             ),
           ],
         ),
-        child: const Icon(
+        child: Icon(
           Icons.shield_rounded,
           size: 36,
           color: AppColors.accent,
@@ -219,12 +219,12 @@ Widget _authHeader(BuildContext context, String title, String subtitle) {
 /// A thin "or" divider between the primary form and the social option.
 Widget _orDivider(BuildContext context) => Row(
   children: [
-    const Expanded(child: Divider(color: AppColors.border)),
+    Expanded(child: Divider(color: AppColors.border)),
     Padding(
       padding: const EdgeInsets.symmetric(horizontal: Space.x3),
       child: Text('or', style: Theme.of(context).textTheme.bodySmall),
     ),
-    const Expanded(child: Divider(color: AppColors.border)),
+    Expanded(child: Divider(color: AppColors.border)),
   ],
 );
 

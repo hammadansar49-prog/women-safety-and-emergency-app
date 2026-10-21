@@ -160,8 +160,8 @@ class _SosButtonState extends State<SosButton>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: _isActive || _isCountdown
-                    ? const [Color(0xFFFF6B85), AppColors.danger]
-                    : const [AppColors.accent, AppColors.primary],
+                    ? [Color(0xFFFF6B85), AppColors.danger]
+                    : [AppColors.accent, AppColors.primary],
               ),
               border: Border.all(
                 color: Colors.white.withValues(alpha: 0.18),

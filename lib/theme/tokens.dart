@@ -10,27 +10,31 @@ class AppColors {
   const AppColors._();
 
   // Generated palette: premium / dark / analogous (seed 23), violet -> magenta.
-  static const text = Color(0xFFEFF1FE);
-  static const bg = Color(0xFF0B0C11);
-  static const surface = Color(0xFF16171D);
-  static const primary = Color(0xFF6C6FB7);
+  static Color get text => light ? const Color(0xFF17181F) : const Color(0xFFEFF1FE);
+  static Color get bg => light ? const Color(0xFFF5F3FA) : const Color(0xFF0B0C11);
+  static Color get surface => light ? const Color(0xFFFFFFFF) : const Color(0xFF16171D);
+  static Color get primary => light ? const Color(0xFF5558A6) : const Color(0xFF6C6FB7);
   static const onPrimary = Color(0xFFFFFFFF);
-  static const secondary = Color(0xFF2A2C41);
-  static const accent = Color(0xFFB68AD0);
-  static const border = Color(0xFF222229);
+
+  /// Which palette is live. Set from the appearance setting before the theme
+  /// is built; every colour below resolves against it.
+  static bool light = false;
+  static Color get secondary => light ? const Color(0xFFE7E3F2) : const Color(0xFF2A2C41);
+  static Color get accent => light ? const Color(0xFF8A55AC) : const Color(0xFFB68AD0);
+  static Color get border => light ? const Color(0xFFDAD6E6) : const Color(0xFF222229);
 
   /// Reserved exclusively for the active-SOS state. Never used as a generic
   /// accent — an emergency has to look unlike anything else in the product.
   /// 6.08:1 on [bg]. White labels on this fill are UI-safe only (3.21:1), so
   /// they are permitted at large bold sizes and nowhere else.
-  static const danger = Color(0xFFFF4D6D);
+  static Color get danger => light ? const Color(0xFFD61F49) : const Color(0xFFFF4D6D);
 
   /// Muted body text. Derived from [text], kept here so the dimmed tone is one
   /// value instead of a dozen hand-picked opacities.
-  static const textMuted = Color(0xFF9BA0B8);
+  static Color get textMuted => light ? const Color(0xFF5A5E73) : const Color(0xFF9BA0B8);
 
   /// Hairline that makes a glass panel read as glass: ~12% white.
-  static const glassHairline = Color(0x1FFFFFFF);
+  static Color get glassHairline => light ? const Color(0x1F000000) : const Color(0x1FFFFFFF);
 }
 
 /// 4px base spacing scale. Named steps with roles, not arbitrary numbers.

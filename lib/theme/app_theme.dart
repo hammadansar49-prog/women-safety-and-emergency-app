@@ -12,8 +12,8 @@ class AppTheme {
   const AppTheme._();
 
   static ThemeData build() {
-    const scheme = ColorScheme(
-      brightness: Brightness.dark,
+    final scheme = ColorScheme(
+      brightness: AppColors.light ? Brightness.light : Brightness.dark,
       primary: AppColors.primary,
       onPrimary: AppColors.onPrimary,
       secondary: AppColors.accent,
@@ -30,7 +30,9 @@ class AppTheme {
       outlineVariant: AppColors.border,
     );
 
-    final body = GoogleFonts.interTextTheme(ThemeData.dark().textTheme);
+    final body = GoogleFonts.interTextTheme(
+      (AppColors.light ? ThemeData.light() : ThemeData.dark()).textTheme,
+    );
     final text = body.copyWith(
       // Display + headline use Space Grotesk with tight tracking; the tracking
       // is what keeps a geometric face from reading loose at large sizes.
@@ -92,7 +94,7 @@ class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
+      brightness: scheme.brightness,
       colorScheme: scheme,
       textTheme: text,
       // The aurora field paints the background, so the scaffold itself is the
@@ -108,7 +110,7 @@ class AppTheme {
         foregroundColor: AppColors.text,
         titleTextStyle: text.titleLarge,
       ),
-      cardTheme: const CardThemeData(
+      cardTheme: CardThemeData(
         elevation: 0,
         color: AppColors.surface,
         surfaceTintColor: Colors.transparent,
@@ -117,7 +119,7 @@ class AppTheme {
           side: BorderSide(color: AppColors.border),
         ),
       ),
-      dividerTheme: const DividerThemeData(
+      dividerTheme: DividerThemeData(
         color: AppColors.border,
         thickness: 1,
         space: 1,
@@ -143,7 +145,7 @@ class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.text,
-          side: const BorderSide(color: AppColors.border),
+          side: BorderSide(color: AppColors.border),
           textStyle: text.labelLarge,
           padding: const EdgeInsets.symmetric(
             horizontal: Space.x6,
@@ -161,15 +163,15 @@ class AppTheme {
           horizontal: Space.x4,
           vertical: Space.x4,
         ),
-        border: const OutlineInputBorder(
+        border: OutlineInputBorder(
           borderRadius: Radii.brSm,
           borderSide: BorderSide(color: AppColors.border),
         ),
-        enabledBorder: const OutlineInputBorder(
+        enabledBorder: OutlineInputBorder(
           borderRadius: Radii.brSm,
           borderSide: BorderSide(color: AppColors.border),
         ),
-        focusedBorder: const OutlineInputBorder(
+        focusedBorder: OutlineInputBorder(
           borderRadius: Radii.brSm,
           borderSide: BorderSide(color: AppColors.accent, width: 1.6),
         ),
@@ -180,12 +182,12 @@ class AppTheme {
         behavior: SnackBarBehavior.floating,
         shape: const RoundedRectangleBorder(borderRadius: Radii.brSm),
       ),
-      listTileTheme: const ListTileThemeData(
+      listTileTheme: ListTileThemeData(
         iconColor: AppColors.accent,
         textColor: AppColors.text,
       ),
-      iconTheme: const IconThemeData(color: AppColors.text),
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
+      iconTheme: IconThemeData(color: AppColors.text),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
         color: AppColors.accent,
         linearTrackColor: AppColors.secondary,
       ),

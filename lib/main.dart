@@ -69,12 +69,33 @@ class SafeHerApp extends StatefulWidget {
   State<SafeHerApp> createState() => _SafeHerAppState();
 }
 
-class _SafeHerAppState extends State<SafeHerApp> {
+class _SafeHerAppState extends State<SafeHerApp> with WidgetsBindingObserver {
   late final SocialController social =
       widget.social ?? SocialController(newAccount: true);
   ThemeMode get themeMode => ThemeMode.values.byName(social.appearance);
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  /// "System" follows the device, including its automatic day/night schedule.
+  @override
+  void didChangePlatformBrightness() {
+    if (mounted) setState(() {});
+  }
+
+  bool get _useLight => switch (themeMode) {
+    ThemeMode.light => true,
+    ThemeMode.dark => false,
+    ThemeMode.system =>
+      WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+          Brightness.light,
+  };
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (widget.social == null) social.dispose();
     super.dispose();
   }
@@ -82,23 +103,27 @@ class _SafeHerAppState extends State<SafeHerApp> {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: social,
-    builder: (context, _) => MaterialApp(
-      title: 'SafeHer',
-      debugShowCheckedModeBanner: false,
-      // One locked dark "aurora glass" theme. The appearance setting is kept so
-      // nothing breaks, but both slots resolve to the same theme for now — a
-      // light variant needs its own generated companion palette.
-      theme: AppTheme.build(),
-      darkTheme: AppTheme.build(),
-      themeMode: themeMode,
-      builder: (context, child) =>
-          AuroraBackground(child: child ?? const SizedBox.shrink()),
-      home: SafeHerShell(
-        social: social,
-        themeMode: themeMode,
-        onThemeChanged: (mode) => social.setAppearance(mode.name),
-      ),
-    ),
+    builder: (context, _) {
+      // The palette is global: set it before the theme (and every widget that
+      // reads AppColors) is built for this frame.
+      AppColors.light = _useLight;
+      return MaterialApp(
+        title: 'SafeHer',
+        debugShowCheckedModeBanner: false,
+        // The active palette is global (set above), so both slots build the same
+        // theme and themeMode just picks one.
+        theme: AppTheme.build(),
+        darkTheme: AppTheme.build(),
+        themeMode: _useLight ? ThemeMode.light : ThemeMode.dark,
+        builder: (context, child) =>
+            AuroraBackground(child: child ?? const SizedBox.shrink()),
+        home: SafeHerShell(
+          social: social,
+          themeMode: themeMode,
+          onThemeChanged: (mode) => social.setAppearance(mode.name),
+        ),
+      );
+    },
   );
 }
 
@@ -226,6 +251,8 @@ class _SafeHerShellState extends State<SafeHerShell> {
 
   void _enter(String username) {
     if (username.isNotEmpty) social.claimUsername(username);
+    // Local preview mode has nobody to talk to, so seed one demo buddy.
+    if (auth is LocalAuthService) social.seedDemoFriend('ayesha');
     social.setSignedIn(true);
     if (mounted) setState(() {});
   }
@@ -562,12 +589,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
   EdgeInsets _pagePadding(BuildContext context) {
     final media = MediaQuery.of(context);
     final side = media.size.width < 360 ? 16.0 : 24.0;
-    return EdgeInsets.fromLTRB(
-      side,
-      24,
-      side,
-      24 + 88 + media.padding.bottom,
-    );
+    return EdgeInsets.fromLTRB(side, 24, side, 24 + 88 + media.padding.bottom);
   }
 
   Widget _welcome() {
@@ -594,69 +616,69 @@ class _SafeHerShellState extends State<SafeHerShell> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const EntranceFade(child: Center(child: _BrandMark())),
-                const SizedBox(height: Space.x8),
-                EntranceFade(
-                  index: 1,
-                  child: Text(
-                    'SafeHer',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.displayLarge,
-                  ),
-                ),
-                const SizedBox(height: Space.x2),
-                EntranceFade(
-                  index: 2,
-                  child: Text(
-                    'One button. The people you chose. Nothing shared until you ask.',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: Space.x12),
-                _panel(
-                  Icons.people_outline,
-                  'Your trusted circle',
-                  'Choose who can help. Friendship and emergency access are two separate approvals.',
-                  index: 3,
-                ),
-                _panel(
-                  Icons.location_on_outlined,
-                  'Share on your terms',
-                  'Location is shared only during an SOS you started. Camera and microphone use always stays visible.',
-                  index: 4,
-                ),
-                const SizedBox(height: Space.x8),
-                EntranceFade(
-                  index: 5,
-                  child: Pressable(
-                    borderRadius: Radii.brSm,
-                    glow: AppColors.accent,
-                    onTap: () => setState(() => _stage = _AuthStage.login),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: Space.x4 + 2,
-                      ),
-                      decoration: BoxDecoration(
-                        borderRadius: Radii.brSm,
-                        gradient: const LinearGradient(
-                          colors: [AppColors.accent, AppColors.primary],
-                        ),
-                        border: Border.all(color: AppColors.glassHairline),
-                      ),
+                    const SizedBox(height: Space.x8),
+                    EntranceFade(
+                      index: 1,
                       child: Text(
-                        'Get started',
+                        'SafeHer',
                         textAlign: TextAlign.center,
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: Colors.white,
-                          fontSize: 16,
+                        style: theme.textTheme.displayLarge,
+                      ),
+                    ),
+                    const SizedBox(height: Space.x2),
+                    EntranceFade(
+                      index: 2,
+                      child: Text(
+                        'One button. The people you chose. Nothing shared until you ask.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: AppColors.textMuted,
                         ),
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(height: Space.x6),
+                    const SizedBox(height: Space.x12),
+                    _panel(
+                      Icons.people_outline,
+                      'Your trusted circle',
+                      'Choose who can help. Friendship and emergency access are two separate approvals.',
+                      index: 3,
+                    ),
+                    _panel(
+                      Icons.location_on_outlined,
+                      'Share on your terms',
+                      'Location is shared only during an SOS you started. Camera and microphone use always stays visible.',
+                      index: 4,
+                    ),
+                    const SizedBox(height: Space.x8),
+                    EntranceFade(
+                      index: 5,
+                      child: Pressable(
+                        borderRadius: Radii.brSm,
+                        glow: AppColors.accent,
+                        onTap: () => setState(() => _stage = _AuthStage.login),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: Space.x4 + 2,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: Radii.brSm,
+                            gradient: LinearGradient(
+                              colors: [AppColors.accent, AppColors.primary],
+                            ),
+                            border: Border.all(color: AppColors.glassHairline),
+                          ),
+                          child: Text(
+                            'Get started',
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: Colors.white,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: Space.x6),
                     EntranceFade(
                       index: 6,
                       child: Text(
@@ -889,15 +911,9 @@ class _SafeHerShellState extends State<SafeHerShell> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
+                    Text(title, style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: Space.x1),
-                    Text(
-                      detail,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
+                    Text(detail, style: Theme.of(context).textTheme.bodyMedium),
                   ],
                 ),
               ),
@@ -923,11 +939,7 @@ class _GlassNavBar extends StatelessWidget {
   final ValueChanged<int> onSelected;
 
   static const _items = <({IconData icon, IconData active, String label})>[
-    (
-      icon: Icons.shield_outlined,
-      active: Icons.shield_rounded,
-      label: 'Home',
-    ),
+    (icon: Icons.shield_outlined, active: Icons.shield_rounded, label: 'Home'),
     (
       icon: Icons.people_outline,
       active: Icons.people_rounded,
@@ -947,12 +959,7 @@ class _GlassNavBar extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          Space.x4,
-          0,
-          Space.x4,
-          Space.x4,
-        ),
+        padding: const EdgeInsets.fromLTRB(Space.x4, 0, Space.x4, Space.x4),
         // heightFactor 1.0 is the fix for the nav floating mid-screen: a plain
         // Center expands to fill the (loose) bottom-bar height and parks the
         // small glass panel in the middle of it. Wrapping the height to the
