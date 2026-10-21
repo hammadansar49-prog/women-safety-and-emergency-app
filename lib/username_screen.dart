@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'social_controller.dart';
 
 class UsernameScreen extends StatefulWidget {
-  const UsernameScreen({super.key, required this.social});
+  const UsernameScreen({super.key, required this.social, this.onReserve});
   final SocialController social;
+
+  /// Reserves the name in the cloud before it is claimed locally.
+  final Future<void> Function(String username)? onReserve;
 
   @override
   State<UsernameScreen> createState() => _UsernameScreenState();
@@ -14,13 +17,16 @@ class _UsernameScreenState extends State<UsernameScreen> {
   final _form = GlobalKey<FormState>();
   String? _saveError;
 
-  void _save() {
+  Future<void> _save() async {
     setState(() => _saveError = null);
     if (!_form.currentState!.validate()) return;
     try {
+      await widget.onReserve?.call(_controller.text);
       widget.social.claimUsername(_controller.text);
     } on StateError catch (error) {
       setState(() => _saveError = error.message);
+    } catch (error) {
+      if (mounted) setState(() => _saveError = error.toString());
     }
   }
 

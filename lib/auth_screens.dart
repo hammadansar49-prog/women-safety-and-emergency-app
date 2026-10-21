@@ -173,7 +173,7 @@ class _GoogleGlyph extends StatelessWidget {
 Widget _authHeader(BuildContext context, String title, String subtitle) {
   final theme = Theme.of(context);
   return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
+    crossAxisAlignment: CrossAxisAlignment.center,
     children: [
       Container(
         width: 64,
@@ -201,9 +201,17 @@ Widget _authHeader(BuildContext context, String title, String subtitle) {
         ),
       ),
       const SizedBox(height: Space.x6),
-      Text(title, style: theme.textTheme.headlineLarge),
+      Text(
+        title,
+        textAlign: TextAlign.center,
+        style: theme.textTheme.headlineLarge,
+      ),
       const SizedBox(height: Space.x2),
-      Text(subtitle, style: theme.textTheme.bodyMedium),
+      Text(
+        subtitle,
+        textAlign: TextAlign.center,
+        style: theme.textTheme.bodyMedium,
+      ),
     ],
   );
 }
@@ -250,8 +258,9 @@ class LoginScreen extends StatefulWidget {
     required this.onCreateAccount,
   });
 
-  final void Function(String username, String password) onLogin;
-  final VoidCallback onGoogle;
+  /// Each callback returns an error message to show, or null on success.
+  final Future<String?> Function(String username, String password) onLogin;
+  final Future<String?> Function() onGoogle;
   final VoidCallback onCreateAccount;
 
   @override
@@ -262,6 +271,21 @@ class _LoginScreenState extends State<LoginScreen> {
   final _username = TextEditingController();
   final _password = TextEditingController();
   String? _error;
+  bool _busy = false;
+
+  Future<void> _run(Future<String?> Function() action) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final error = await action();
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _error = (error == null || error.isEmpty) ? null : error;
+    });
+  }
 
   @override
   void dispose() {
@@ -277,8 +301,7 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() => _error = 'Enter your username and password.');
       return;
     }
-    setState(() => _error = null);
-    widget.onLogin(u, p);
+    _run(() => widget.onLogin(u, p));
   }
 
   @override
@@ -331,11 +354,14 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       const SizedBox(height: Space.x2),
-      EntranceFade(index: 3, child: _PrimaryButton(label: 'Sign in', onTap: _submit)),
+      EntranceFade(index: 3, child: _PrimaryButton(
+          label: _busy ? 'Signing in…' : 'Sign in',
+          onTap: _submit,
+        )),
       const SizedBox(height: Space.x6),
       EntranceFade(index: 4, child: _orDivider(context)),
       const SizedBox(height: Space.x6),
-      EntranceFade(index: 5, child: _GoogleButton(onTap: widget.onGoogle)),
+      EntranceFade(index: 5, child: _GoogleButton(onTap: () => _run(widget.onGoogle))),
       const SizedBox(height: Space.x6),
       EntranceFade(
         index: 6,
@@ -363,9 +389,13 @@ class RegisterScreen extends StatefulWidget {
     required this.onBackToLogin,
   });
 
-  final void Function(String email, String username, String password)
+  final Future<String?> Function(
+    String email,
+    String username,
+    String password,
+  )
   onRegister;
-  final VoidCallback onGoogle;
+  final Future<String?> Function() onGoogle;
   final VoidCallback onBackToLogin;
 
   @override
@@ -377,6 +407,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _username = TextEditingController();
   final _password = TextEditingController();
   String? _error;
+  bool _busy = false;
+
+  Future<void> _run(Future<String?> Function() action) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final error = await action();
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _error = (error == null || error.isEmpty) ? null : error;
+    });
+  }
 
   @override
   void dispose() {
@@ -402,8 +447,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() => _error = 'Password needs at least 6 characters.');
       return;
     }
-    setState(() => _error = null);
-    widget.onRegister(email, u, p);
+    _run(() => widget.onRegister(email, u, p));
   }
 
   @override
@@ -472,12 +516,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
       const SizedBox(height: Space.x6),
       EntranceFade(
         index: 4,
-        child: _PrimaryButton(label: 'Create account', onTap: _submit),
+        child: _PrimaryButton(
+          label: _busy ? 'Creating…' : 'Create account',
+          onTap: _submit,
+        ),
       ),
       const SizedBox(height: Space.x6),
       EntranceFade(index: 5, child: _orDivider(context)),
       const SizedBox(height: Space.x6),
-      EntranceFade(index: 6, child: _GoogleButton(onTap: widget.onGoogle)),
+      EntranceFade(index: 6, child: _GoogleButton(onTap: () => _run(widget.onGoogle))),
     ]);
   }
 }

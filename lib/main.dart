@@ -7,6 +7,7 @@ import 'contacts_screen.dart';
 import 'username_screen.dart';
 import 'local_store.dart';
 import 'auth_screens.dart';
+import 'auth_service.dart';
 import 'profile_photo.dart';
 import 'sos_shortcut.dart';
 import 'theme/app_theme.dart';
@@ -107,7 +108,9 @@ class SafeHerShell extends StatefulWidget {
     this.social,
     this.themeMode = ThemeMode.system,
     this.onThemeChanged,
+    this.auth,
   });
+  final AuthService? auth;
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode>? onThemeChanged;
   final SocialController? social;
@@ -118,10 +121,14 @@ class SafeHerShell extends StatefulWidget {
 /// The auth surface shown before the user reaches the app.
 enum _AuthStage { welcome, login, register }
 
+AuthService _defaultAuth() =>
+    Firebase.apps.isNotEmpty ? FirebaseAuthService() : LocalAuthService();
+
 class _SafeHerShellState extends State<SafeHerShell> {
   final emergency = EmergencyController();
   late final SosShortcut shortcut;
   late final SocialController social;
+  late final AuthService auth;
   String? sosOwner;
   String? activeEventId;
 
@@ -138,6 +145,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
   void initState() {
     super.initState();
     social = widget.social ?? SocialController(newAccount: true);
+    auth = widget.auth ?? _defaultAuth();
     shortcut = SosShortcut(
       selectedKey: social.shortcutKey,
       onSos: () {
@@ -165,41 +173,61 @@ class _SafeHerShellState extends State<SafeHerShell> {
   }
 
   // --- Auth flow -----------------------------------------------------------
-  // These drive navigation and "sign in" against local data. Real
-  // email/password and Google authentication are wired to Firebase Auth in a
-  // later step; today the identity is local, but the flow is the real one.
+  // Real Firebase Auth where configured (Android); an in-memory stand-in with
+  // the same rules elsewhere.
 
-  void _handleLogin(String username, String password) {
+  Future<String?> _handleLogin(String username, String password) async {
     try {
-      social.claimUsername(username);
-      social.setSignedIn(true);
-    } on StateError catch (error) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
-      return;
+      final name = await auth.login(username: username, password: password);
+      _enter(name);
+      return null;
+    } on AuthFailure catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Could not sign in. Try again.';
     }
-    setState(() {});
   }
 
-  void _handleRegister(String email, String username, String password) {
+  Future<String?> _handleRegister(
+    String email,
+    String username,
+    String password,
+  ) async {
+    final taken = social.usernameError(username);
+    if (taken != null) return taken;
     try {
-      social.claimUsername(username);
-      social.setSignedIn(true);
-    } on StateError catch (error) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
-      return;
+      final name = await auth.register(
+        email: email,
+        username: username,
+        password: password,
+      );
+      _enter(name);
+      return null;
+    } on AuthFailure catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Could not create the account. Try again.';
     }
-    setState(() {});
   }
 
-  void _handleGoogle() {
-    // Simulated Google sign-in: signs in without a username, so the next
-    // screen is the username step before entering the app.
+  /// Opens the real Google account chooser. An account with no username yet
+  /// lands on the username step.
+  Future<String?> _handleGoogle() async {
+    try {
+      final name = await auth.google();
+      _enter(name);
+      return null;
+    } on AuthFailure catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Google sign-in failed. Try again.';
+    }
+  }
+
+  void _enter(String username) {
+    if (username.isNotEmpty) social.claimUsername(username);
     social.setSignedIn(true);
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   Widget _storageStatus() {
@@ -273,6 +301,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
                                     try {
                                       await social.flush();
                                       shortcut.enable(false);
+                                      await auth.signOut();
                                       social.signOut();
                                       await social.flush();
                                     } catch (_) {
@@ -425,6 +454,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
         return UsernameScreen(
           key: ValueKey(social.currentUserId),
           social: social,
+          onReserve: auth.reserveUsername,
         );
       }
       return Scaffold(

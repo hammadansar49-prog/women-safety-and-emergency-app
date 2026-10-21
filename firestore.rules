@@ -1,2 +1,27 @@
 rules_version = '2';
-service cloud.firestore { match /databases/{database}/documents { match /{document=**} { allow read, write: if false; } } }
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Username -> account lookup, used to sign in by username. A single
+    // document can be read by name but the collection cannot be listed, and
+    // documents can only ever be created: a taken name is never released.
+    match /usernames/{name} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if request.auth != null
+        && name.matches('^[a-z0-9_]{3,20}$')
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'createdAt']);
+      allow update, delete: if false;
+    }
+
+    // Each account's own profile pointer; the username is write-once.
+    match /users/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['username']);
+      allow list, update, delete: if false;
+    }
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}
