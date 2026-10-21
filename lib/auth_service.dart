@@ -38,7 +38,15 @@ abstract class AuthService {
     required String email,
     required String username,
     required String password,
+    String name = '',
   });
+
+  /// The signed-in account's display name, if it has one.
+  String? get displayName => null;
+
+  /// Sends a password-reset email. Always succeeds from the outside so the
+  /// screen never reveals which emails are registered.
+  Future<void> sendPasswordReset(String email);
 
   /// Signs in by username or email. Returns the account's username.
   Future<String> login({required String username, required String password});
@@ -99,6 +107,24 @@ class FirebaseAuthService implements AuthService {
   }
 
   @override
+  String? get displayName => _auth.currentUser?.displayName;
+
+  @override
+  Future<void> sendPasswordReset(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'network-request-failed') {
+        throw const AuthFailure('No connection. Check your internet.');
+      }
+      if (e.code == 'invalid-email') {
+        throw const AuthFailure('Enter a valid email address.');
+      }
+      // Unknown email etc.: stay silent, same as success.
+    }
+  }
+
+  @override
   Future<List<RemoteProfile>> searchUsers(String prefix) async {
     final term = normalizeUsername(prefix).replaceFirst('@', '');
     if (term.isEmpty || !RegExp(r'^[a-z0-9_]+$').hasMatch(term)) return [];
@@ -122,8 +148,10 @@ class FirebaseAuthService implements AuthService {
     required String email,
     required String username,
     required String password,
+    String name = '',
   }) async {
-    final name = normalizeUsername(username);
+    final fullName = name.trim();
+    name = normalizeUsername(username);
     if (!_usernamePattern.hasMatch(name)) {
       throw const AuthFailure('Use 3–20 letters, numbers or underscores.');
     }
@@ -141,6 +169,11 @@ class FirebaseAuthService implements AuthService {
         // Lost the race for the name: don't leave a half-made account behind.
         await cred.user!.delete();
         rethrow;
+      }
+      if (fullName.isNotEmpty) {
+        try {
+          await cred.user!.updateDisplayName(fullName);
+        } catch (_) {}
       }
       return name;
     } on FirebaseAuthException catch (e) {
@@ -247,6 +280,38 @@ class FirebaseAuthService implements AuthService {
 /// desktop, tests). Accounts live in memory only, but the rules match the
 /// cloud ones: unique usernames, salted password hashes, generic login errors.
 class LocalAuthService implements AuthService {
+  LocalAuthService({String? saved, this.onChanged}) {
+    if (saved == null) return;
+    final m = jsonDecode(saved) as Map<String, dynamic>;
+    for (final e in (m['accounts'] as Map<String, dynamic>).entries) {
+      _byName[e.key] = _Account(e.value['salt'], e.value['hash']);
+    }
+    _nameByEmail.addAll(Map<String, String>.from(m['emails']));
+    _emails.addAll(_nameByEmail.keys);
+    _everTaken.addAll(List<String>.from(m['taken']));
+  }
+
+  /// Called with the serialized accounts after every change, so they survive
+  /// a reload (salted hashes only, never passwords).
+  final void Function(String data)? onChanged;
+
+  void _changed() => onChanged?.call(
+    jsonEncode({
+      'accounts': {
+        for (final e in _byName.entries)
+          e.key: {'salt': e.value.salt, 'hash': e.value.hash},
+      },
+      'emails': _nameByEmail,
+      'taken': _everTaken.toList(),
+    }),
+  );
+
+  @override
+  String? get displayName => null;
+
+  @override
+  Future<void> sendPasswordReset(String email) async {}
+
   final Map<String, _Account> _byName = {};
   final Map<String, String> _nameByEmail = {};
   final Set<String> _emails = {};
@@ -265,8 +330,9 @@ class LocalAuthService implements AuthService {
     required String email,
     required String username,
     required String password,
+    String name = '',
   }) async {
-    final name = normalizeUsername(username);
+    name = normalizeUsername(username);
     final mail = email.trim().toLowerCase();
     if (!_usernamePattern.hasMatch(name)) {
       throw const AuthFailure('Use 3–20 letters, numbers or underscores.');
@@ -282,6 +348,7 @@ class LocalAuthService implements AuthService {
     _everTaken.add(name);
     _emails.add(mail);
     _nameByEmail[mail] = name;
+    _changed();
     return name;
   }
 
@@ -312,6 +379,7 @@ class LocalAuthService implements AuthService {
       throw const AuthFailure('That username is already taken.');
     }
     _everTaken.add(name);
+    _changed();
   }
 
   @override

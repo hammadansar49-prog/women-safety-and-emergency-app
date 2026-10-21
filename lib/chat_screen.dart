@@ -260,11 +260,29 @@ class _ChatScreenState extends State<ChatScreen> {
                                 padding: const EdgeInsets.all(16),
                                 itemCount: messages.length,
                                 itemBuilder: (context, index) {
-                                  final message =
-                                      messages[messages.length - index - 1];
-                                  return _Bubble(
-                                    message: message,
-                                    mine: message.senderId == _ownerId,
+                                  final at = messages.length - index - 1;
+                                  final message = messages[at];
+                                  final day = message.createdAt.toLocal();
+                                  final newDay =
+                                      at == 0 ||
+                                      !_sameDay(
+                                        messages[at - 1].createdAt.toLocal(),
+                                        day,
+                                      );
+                                  return Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      if (newDay) _DayLabel(day),
+                                      if (at == 0 && sos)
+                                        _SosChip(
+                                          '${friend.name} is now one of your SOS buddies',
+                                        ),
+                                      _Bubble(
+                                        message: message,
+                                        mine: message.senderId == _ownerId,
+                                      ),
+                                    ],
                                   );
                                 },
                               ),
@@ -458,6 +476,80 @@ class _MenuButton extends StatelessWidget {
   );
 }
 
+bool _sameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
+/// "Today", "Yesterday" or the date, centred above that day's messages.
+class _DayLabel extends StatelessWidget {
+  const _DayLabel(this.day);
+  final DateTime day;
+
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  String get _text {
+    final now = DateTime.now();
+    if (_sameDay(day, now)) return 'Today';
+    if (_sameDay(day, now.subtract(const Duration(days: 1)))) {
+      return 'Yesterday';
+    }
+    return '${day.day} ${_months[day.month - 1]} ${day.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 6, bottom: 12),
+    child: Center(
+      child: Text(
+        _text,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    ),
+  );
+}
+
+/// A small system note in the thread, such as a buddy being added.
+class _SosChip extends StatelessWidget {
+  const _SosChip(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          color: AppColors.tint,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.star_rounded, size: 14, color: AppColors.accent),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                text,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.light ? AppColors.onHeader : null,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 class _Bubble extends StatelessWidget {
   const _Bubble({required this.message, required this.mine});
   final ChatMessage message;
@@ -499,21 +591,20 @@ class _Bubble extends StatelessWidget {
                 bottomRight: Radius.circular(mine ? 6 : 20),
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
+            // Wrap hugs short messages and drops the time to its own line
+            // only when the text fills the row, as in WhatsApp.
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.end,
+              spacing: 10,
               children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    message.text,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: fg,
-                      fontSize: 14.5,
-                    ),
+                Text(
+                  message.text,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: fg,
+                    fontSize: 14.5,
                   ),
                 ),
-                const SizedBox(height: 3),
                 Text(
                   MaterialLocalizations.of(context).formatTimeOfDay(
                     TimeOfDay.fromDateTime(message.createdAt.toLocal()),

@@ -1,4 +1,7 @@
 import 'dart:convert';
+import 'dart:math';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 @immutable
@@ -127,40 +130,49 @@ class SocialController extends ChangeNotifier {
   Future<LocalSosEvent> activateSos() async => createSos();
   Future<void> lookupUsername(String value) async {}
   factory SocialController.fromSnapshot(String value) {
+    final c = SocialController();
+    c._apply(value);
+    return c;
+  }
+
+  void _apply(String value) {
     final m = jsonDecode(value) as Map<String, dynamic>;
     if (m['version'] != 1) {
       throw const FormatException('Unsupported saved data');
     }
-    final c = SocialController();
-    c._profiles.clear();
+    _wipe();
+    _profiles.clear();
     for (final p in m['profiles']) {
-      c._profiles.add(
+      _profiles.add(
         DemoPerson(id: p['id'], name: p['name'], username: p['username']),
       );
     }
-    c._currentUserId = m['current'];
-    c.person(c._currentUserId);
-    c._sequence = m['sequence'];
-    c.signedIn = m['signedIn'];
-    c.appearanceChosen = m['appearanceChosen'] == true;
+    _currentUserId = m['current'];
+    person(_currentUserId);
+    _sequence = m['sequence'];
+    signedIn = m['signedIn'];
+    appearanceChosen = m['appearanceChosen'] == true;
     // The baby pink light design is the default until the user picks otherwise.
-    c.appearance = c.appearanceChosen ? (m['appearance'] ?? 'light') : 'light';
-    c.countdown = m['countdown'] ?? 5;
-    c.shortcutKey = m['shortcutKey'] == 'volumeDown'
+    appearance = appearanceChosen ? (m['appearance'] ?? 'light') : 'light';
+    countdown = m['countdown'] ?? 5;
+    shortcutKey = m['shortcutKey'] == 'volumeDown'
         ? 'volumeDown'
         : 'volumeUp';
-    c._photos.addAll(Map<String, String>.from(m['photos']));
-    c._friendships.addAll(List<String>.from(m['friends']));
-    c._favorites.addAll(List<String>.from(m['favorites']));
-    c._approved.addAll(List<String>.from(m['approved']));
-    c._pendingConsent.addAll(List<String>.from(m['pending']));
+    _pinSalt = m['pinSalt'] as String?;
+    _pinHash = m['pinHash'] as String?;
+    guideSeen = m['guideSeen'] == true;
+    _photos.addAll(Map<String, String>.from(m['photos']));
+    _friendships.addAll(List<String>.from(m['friends']));
+    _favorites.addAll(List<String>.from(m['favorites']));
+    _approved.addAll(List<String>.from(m['approved']));
+    _pendingConsent.addAll(List<String>.from(m['pending']));
     for (final r in m['requests']) {
-      c._requests.add(
+      _requests.add(
         FriendRequest(id: r['id'], fromId: r['from'], toId: r['to']),
       );
     }
     for (final r in m['messages']) {
-      c._messages.add(
+      _messages.add(
         ChatMessage(
           id: r['id'],
           senderId: r['from'],
@@ -171,7 +183,7 @@ class SocialController extends ChangeNotifier {
       );
     }
     for (final r in m['events']) {
-      c._events.add(
+      _events.add(
         LocalSosEvent(
           id: r['id'],
           senderId: r['from'],
@@ -187,7 +199,132 @@ class SocialController extends ChangeNotifier {
         ),
       );
     }
-    return c;
+  }
+
+  // --- PIN lock (per account; only a salted hash is kept) ------------------
+  String? _pinSalt;
+  String? _pinHash;
+  bool guideSeen = false;
+
+  bool get hasPin => _pinHash != null;
+
+  static String _pinDigest(String salt, String pin) =>
+      sha256.convert(utf8.encode('$salt:$pin')).toString();
+
+  void setPin(String pin) {
+    final r = Random.secure();
+    _pinSalt = base64Url.encode(List.generate(16, (_) => r.nextInt(256)));
+    _pinHash = _pinDigest(_pinSalt!, pin);
+    notifyListeners();
+  }
+
+  void clearPin() {
+    _pinSalt = null;
+    _pinHash = null;
+    notifyListeners();
+  }
+
+  bool checkPin(String pin) =>
+      _pinHash != null && _pinDigest(_pinSalt!, pin) == _pinHash;
+
+  void markGuideSeen() {
+    guideSeen = true;
+    notifyListeners();
+  }
+
+  /// Forgets everything held in memory, back to a blank, signed-out device.
+  /// Appearance is a device preference and survives.
+  void _wipe() {
+    _profiles
+      ..clear()
+      ..add(const DemoPerson(id: 'hammad', name: 'Hammad', username: ''));
+    _currentUserId = 'hammad';
+    _sequence = 0;
+    signedIn = false;
+    countdown = 5;
+    shortcutKey = 'volumeUp';
+    _pinSalt = null;
+    _pinHash = null;
+    guideSeen = false;
+    _photos.clear();
+    _friendships.clear();
+    _favorites.clear();
+    _approved.clear();
+    _pendingConsent.clear();
+    _requests.clear();
+    _messages.clear();
+    _events.clear();
+  }
+
+  /// The key this account's data is stored under on this device. Null while
+  /// nobody is signed in (or a brand new Google account has no username yet),
+  /// in which case nothing account-specific is written anywhere.
+  String? accountKey;
+
+  /// Per-account writer: (key, snapshot). Always called with the key the
+  /// snapshot belongs to, so an account switch can never cross the streams.
+  Future<void> Function(String key, String data)? persistAccount;
+
+  /// Switches to [key]'s own data ([snapshot], or a blank account). Whatever
+  /// the previous account had is dropped from memory first.
+  void enterAccount(
+    String key,
+    String? snapshot, {
+    required String name,
+    String username = '',
+  }) {
+    accountKey = null;
+    _wipe();
+    if (snapshot != null) {
+      _apply(snapshot);
+    } else {
+      _profiles[0] = DemoPerson(
+        id: 'hammad',
+        name: name.isEmpty ? (username.isEmpty ? 'SafeHer user' : username) : name,
+        username: username,
+      );
+    }
+    accountKey = key;
+    notifyListeners();
+  }
+
+  /// Starts a signed-in account that has no username yet (new Google user).
+  void enterUnnamedAccount({required String name}) {
+    accountKey = null;
+    _wipe();
+    if (name.isNotEmpty) {
+      _profiles[0] = DemoPerson(id: 'hammad', name: name, username: '');
+    }
+    signedIn = true;
+    notifyListeners();
+  }
+
+  /// Attaches the freshly claimed username as the storage key.
+  void bindAccountKey(String key) {
+    accountKey = key;
+    notifyListeners();
+  }
+
+  /// Leaves the account: its data stays on disk under its own key, but nothing
+  /// of it remains in memory for the next person to see.
+  void leaveAccount() {
+    accountKey = null;
+    _wipe();
+    notifyListeners();
+  }
+
+  void setName(String value) {
+    final name = value.trim();
+    if (name.isEmpty) return;
+    final index = _profiles.indexWhere((p) => p.id == currentUserId);
+    if (index == -1) return;
+    final old = _profiles[index];
+    _profiles[index] = DemoPerson(
+      id: old.id,
+      name: name,
+      username: old.username,
+    );
+    notifyListeners();
   }
 
   String snapshot() => jsonEncode({
@@ -199,6 +336,9 @@ class SocialController extends ChangeNotifier {
     'appearanceChosen': appearanceChosen,
     'countdown': countdown,
     'shortcutKey': shortcutKey,
+    'pinSalt': _pinSalt,
+    'pinHash': _pinHash,
+    'guideSeen': guideSeen,
     'photos': _photos,
     'profiles': [
       for (final p in profiles)
@@ -274,18 +414,7 @@ class SocialController extends ChangeNotifier {
   /// clean: the username is cleared (so it can be claimed again), and the
   /// account is signed out. Without this, logging out and back in would silently
   /// reuse the previous username instead of showing the login screen.
-  void signOut() {
-    final index = _profiles.indexWhere((p) => p.id == currentUserId);
-    if (index != -1) {
-      _profiles[index] = DemoPerson(
-        id: currentUserId,
-        name: currentUser.name,
-        username: '',
-      );
-    }
-    signedIn = false;
-    notifyListeners();
-  }
+  void signOut() => leaveAccount();
 
   void setAppearance(String value) {
     appearance = value;
@@ -307,13 +436,16 @@ class SocialController extends ChangeNotifier {
   @override
   void notifyListeners() {
     final write = persist;
-    if (write != null) {
+    final keyed = persistAccount;
+    final key = accountKey;
+    if (write != null || (keyed != null && key != null)) {
       final data = snapshot();
       final revision = ++_saveRevision;
       saving = true;
       _pendingSave = _pendingSave.then((_) async {
         try {
-          await write(data);
+          if (write != null) await write(data);
+          if (keyed != null && key != null) await keyed(key, data);
           if (revision == _saveRevision) saveError = null;
         } catch (_) {
           if (revision == _saveRevision) {
@@ -367,6 +499,7 @@ class SocialController extends ChangeNotifier {
       name: currentUser.name,
       username: input.trim().toLowerCase(),
     );
+    accountKey ??= input.trim().toLowerCase();
     notifyListeners();
   }
 
@@ -507,6 +640,15 @@ class SocialController extends ChangeNotifier {
   /// accounts.
   void seedDemoFriend(String friendId) {
     if (friendId == currentUserId) return;
+    if (!_profiles.any((p) => p.id == friendId)) {
+      _profiles.add(
+        DemoPerson(
+          id: friendId,
+          name: friendId[0].toUpperCase() + friendId.substring(1),
+          username: friendId,
+        ),
+      );
+    }
     if (areFriends(currentUserId, friendId)) return;
     _requests.removeWhere(
       (r) =>

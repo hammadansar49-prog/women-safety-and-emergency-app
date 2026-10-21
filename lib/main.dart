@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'emergency_controller.dart';
@@ -23,6 +24,9 @@ import 'ui/sos_slider.dart';
 import 'profile_screen.dart';
 import 'sos_buddies_screen.dart';
 import 'permissions_screen.dart';
+import 'security_screens.dart';
+import 'onboarding_guide.dart';
+import 'incoming_sos_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,7 +47,22 @@ Future<void> main() async {
     }
   }
   try {
-    final social = await loadLocalAccount();
+    final loaded = await loadLocalAccount();
+    final social = loaded.social;
+    final vault = loaded.vault;
+    // Reopen the account that was signed in, with only its own data. If the
+    // cloud session is gone, the device starts signed out instead.
+    final last = vault.session;
+    if (last != null) {
+      final cloudGone =
+          Firebase.apps.isNotEmpty && FirebaseAuth.instance.currentUser == null;
+      final saved = vault.account(last);
+      if (cloudGone || saved == null) {
+        await vault.setSession(null);
+      } else {
+        social.enterAccount(last, saved, name: '');
+      }
+    }
     final previewScreen = localPreview
         ? Uri.base.queryParameters['screen']
         : null;
@@ -51,10 +70,14 @@ Future<void> main() async {
         !social.signedIn &&
         previewScreen != 'login' &&
         previewScreen != 'register') {
-      if (social.currentUser.username.isEmpty && previewScreen != 'username') {
-        social.claimUsername('tester_one');
-      }
+      social.enterAccount(
+        'tester_one',
+        vault.account('tester_one'),
+        name: 'Tester',
+        username: previewScreen == 'username' ? '' : 'tester_one',
+      );
       social.setSignedIn(true);
+      if (previewScreen != 'guide') social.markGuideSeen();
       social.seedDemoFriend('ayesha');
       social.seedDemoSosBuddy('ayesha');
     }
@@ -64,7 +87,7 @@ Future<void> main() async {
       social.saveError =
           'Could not recover the selected photo. Please choose it again.';
     }
-    runApp(SafeHerApp(social: social));
+    runApp(SafeHerApp(social: social, vault: vault));
   } catch (_) {
     runApp(
       MaterialApp(
@@ -87,8 +110,9 @@ Future<void> main() async {
 }
 
 class SafeHerApp extends StatefulWidget {
-  const SafeHerApp({super.key, this.social});
+  const SafeHerApp({super.key, this.social, this.vault});
   final SocialController? social;
+  final LocalVault? vault;
   @override
   State<SafeHerApp> createState() => _SafeHerAppState();
 }
@@ -143,6 +167,7 @@ class _SafeHerAppState extends State<SafeHerApp> with WidgetsBindingObserver {
             AuroraBackground(child: child ?? const SizedBox.shrink()),
         home: SafeHerShell(
           social: social,
+          vault: widget.vault,
           themeMode: themeMode,
           onThemeChanged: (mode) => social.setAppearance(mode.name),
         ),
@@ -158,7 +183,9 @@ class SafeHerShell extends StatefulWidget {
     this.themeMode = ThemeMode.system,
     this.onThemeChanged,
     this.auth,
+    this.vault,
   });
+  final LocalVault? vault;
   final AuthService? auth;
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode>? onThemeChanged;
@@ -170,10 +197,8 @@ class SafeHerShell extends StatefulWidget {
 /// The auth surface shown before the user reaches the app.
 enum _AuthStage { welcome, login, register }
 
-AuthService _defaultAuth() =>
-    Firebase.apps.isNotEmpty ? FirebaseAuthService() : LocalAuthService();
-
-class _SafeHerShellState extends State<SafeHerShell> {
+class _SafeHerShellState extends State<SafeHerShell>
+    with WidgetsBindingObserver {
   final emergency = EmergencyController();
   late final SosShortcut shortcut;
   late final SocialController social;
@@ -195,7 +220,18 @@ class _SafeHerShellState extends State<SafeHerShell> {
   void initState() {
     super.initState();
     social = widget.social ?? SocialController(newAccount: true);
-    auth = widget.auth ?? _defaultAuth();
+    auth =
+        widget.auth ??
+        (Firebase.apps.isNotEmpty
+            ? FirebaseAuthService()
+            : LocalAuthService(
+                saved: widget.vault?.authData,
+                onChanged: widget.vault?.saveAuthData,
+              ));
+    social.addListener(_syncSession);
+    WidgetsBinding.instance.addObserver(this);
+    // Reopening into an account with a PIN starts locked.
+    _locked = social.signedIn && social.hasPin;
     // Local preview mode: an already signed-in profile also gets the demo buddy.
     if (auth is LocalAuthService &&
         social.signedIn &&
@@ -254,6 +290,12 @@ class _SafeHerShellState extends State<SafeHerShell> {
         setState(() => page = 3);
       case 'register':
         setState(() => _stage = _AuthStage.register);
+      case 'forgot':
+        Navigator.of(context).push(
+          SafeRoute<void>(
+            builder: (_) => ForgotPasswordScreen(onSend: (_) async => null),
+          ),
+        );
       case 'chat':
         Navigator.of(context).push(
           SafeRoute<void>(
@@ -279,11 +321,59 @@ class _SafeHerShellState extends State<SafeHerShell> {
         ).push(SafeRoute<void>(builder: (_) => const PermissionsScreen()));
       case 'editprofile':
         _openEditProfile();
+      case 'guide':
+        break;
+      case 'lock':
+        setState(() => _locked = true);
+      case 'pin':
+        Navigator.of(context).push(
+          SafeRoute<void>(
+            builder: (_) =>
+                PinSetupScreen(social: social, mode: PinMode.create),
+          ),
+        );
       case 'privacy':
         Navigator.of(
           context,
         ).push(SafeRoute<void>(builder: (_) => const PrivacyGuideScreen()));
     }
+  }
+
+  bool _locked = false;
+  DateTime? _pausedAt;
+
+  /// Locks again after the app has been away for a while. Short trips (a
+  /// permission dialog, the dialer) do not lock.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _pausedAt = DateTime.now();
+    } else if (state == AppLifecycleState.resumed) {
+      final away = _pausedAt;
+      _pausedAt = null;
+      if (away != null &&
+          social.signedIn &&
+          social.hasPin &&
+          DateTime.now().difference(away) > const Duration(seconds: 45) &&
+          mounted) {
+        setState(() => _locked = true);
+      }
+    }
+  }
+
+  String? _savedSession;
+
+  /// Remembers which account is signed in (or none), so a restart reopens only
+  /// that account.
+  void _syncSession() {
+    final vault = widget.vault;
+    if (vault == null) return;
+    final key = social.signedIn && social.currentUser.username.isNotEmpty
+        ? social.accountKey
+        : null;
+    if (key == _savedSession) return;
+    _savedSession = key;
+    vault.setSession(key);
   }
 
   // --- Auth flow -----------------------------------------------------------
@@ -306,16 +396,16 @@ class _SafeHerShellState extends State<SafeHerShell> {
     String email,
     String username,
     String password,
+    String fullName,
   ) async {
-    final taken = social.usernameError(username);
-    if (taken != null) return taken;
     try {
       final name = await auth.register(
         email: email,
         username: username,
         password: password,
+        name: fullName,
       );
-      _enter(name);
+      _enter(name, fresh: true, fullName: fullName);
       return null;
     } on AuthFailure catch (e) {
       return e.message;
@@ -338,8 +428,31 @@ class _SafeHerShellState extends State<SafeHerShell> {
     }
   }
 
-  void _enter(String username) {
-    if (username.isNotEmpty) social.claimUsername(username);
+  Future<String?> _handleForgot(String email) async {
+    try {
+      await auth.sendPasswordReset(email);
+      return null;
+    } on AuthFailure catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Could not send the link. Try again.';
+    }
+  }
+
+  /// Opens [username]'s own data and nobody else's. A brand new account
+  /// ([fresh]) always starts blank.
+  void _enter(String username, {bool fresh = false, String fullName = ''}) {
+    final name = fullName.isNotEmpty ? fullName : (auth.displayName ?? '');
+    if (username.isEmpty) {
+      social.enterUnnamedAccount(name: name);
+    } else {
+      social.enterAccount(
+        username,
+        fresh ? null : widget.vault?.account(username),
+        name: name,
+        username: username,
+      );
+    }
     // Local preview mode has nobody to talk to, so seed one demo buddy.
     if (auth is LocalAuthService) social.seedDemoFriend('ayesha');
     social.setSignedIn(true);
@@ -484,6 +597,8 @@ class _SafeHerShellState extends State<SafeHerShell> {
 
   @override
   void dispose() {
+    social.removeListener(_syncSession);
+    WidgetsBinding.instance.removeObserver(this);
     shortcut.dispose();
     emergency.dispose();
     if (widget.social == null) social.dispose();
@@ -502,6 +617,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
             return LoginScreen(
               onLogin: _handleLogin,
               onGoogle: _handleGoogle,
+              onForgotPassword: _handleForgot,
               onCreateAccount: () =>
                   setState(() => _stage = _AuthStage.register),
             );
@@ -520,6 +636,9 @@ class _SafeHerShellState extends State<SafeHerShell> {
           social: social,
           onReserve: auth.reserveUsername,
         );
+      }
+      if (!social.guideSeen) {
+        return OnboardingGuide(onDone: social.markGuideSeen);
       }
       final ownSos =
           sosOwner == social.currentUserId &&
@@ -549,7 +668,14 @@ class _SafeHerShellState extends State<SafeHerShell> {
                           'Location unavailable. Connection required.',
                         ),
                         trailing: TextButton(
-                          onPressed: () => setState(() => page = 2),
+                          onPressed: () => Navigator.of(context).push(
+                            SafeRoute<void>(
+                              builder: (_) => IncomingSosScreen(
+                                social: social,
+                                eventId: event.id,
+                              ),
+                            ),
+                          ),
                           child: const Text('View'),
                         ),
                       ),
@@ -594,6 +720,11 @@ class _SafeHerShellState extends State<SafeHerShell> {
             onCancel: () => _finishSos(cancelled: true),
             onSafe: () => _finishSos(cancelled: false),
           ),
+          if (_locked)
+            PinLockScreen(
+              social: social,
+              onUnlocked: () => setState(() => _locked = false),
+            ),
         ],
       );
     },
@@ -1138,6 +1269,33 @@ class _SafeHerShellState extends State<SafeHerShell> {
           ),
         ),
         RowCard(
+          leading: const IconChip(Icons.lock_outline_rounded),
+          title: 'App PIN lock',
+          detail: social.hasPin
+              ? 'On. Asked when SafeHer opens'
+              : 'Ask for a PIN when SafeHer opens',
+          onTap: () => Navigator.of(context).push(
+            SafeRoute<void>(
+              builder: (_) => PinSetupScreen(
+                social: social,
+                mode: social.hasPin ? PinMode.disable : PinMode.create,
+              ),
+            ),
+          ),
+          trailing: SoftSwitch(
+            value: social.hasPin,
+            label: 'App PIN lock',
+            onChanged: (_) => Navigator.of(context).push(
+              SafeRoute<void>(
+                builder: (_) => PinSetupScreen(
+                  social: social,
+                  mode: social.hasPin ? PinMode.disable : PinMode.create,
+                ),
+              ),
+            ),
+          ),
+        ),
+        RowCard(
           leading: const IconChip(Icons.logout_rounded),
           title: 'Sign out',
           onTap: _confirmSignOut,
@@ -1219,11 +1377,11 @@ class _NavBar extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onSelected;
 
-  static const _items = <({IconData icon, String label})>[
-    (icon: Icons.shield_outlined, label: 'Home'),
-    (icon: Icons.people_outline, label: 'Buddies'),
-    (icon: Icons.history, label: 'Activity'),
-    (icon: Icons.settings_outlined, label: 'Settings'),
+  static const _items = <({int glyph, String label})>[
+    (glyph: 0, label: 'Home'),
+    (glyph: 1, label: 'Buddies'),
+    (glyph: 2, label: 'Activity'),
+    (glyph: 3, label: 'Settings'),
   ];
 
   @override
@@ -1245,9 +1403,9 @@ class _NavBar extends StatelessWidget {
               borderRadius: BorderRadius.circular(26),
               padding: EdgeInsets.zero,
               blur: 26,
-              opacity: 0.70,
+              opacity: AppColors.light ? 1 : 0.70,
               child: SizedBox(
-                height: 70,
+                height: 72,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
@@ -1268,7 +1426,7 @@ class _NavBar extends StatelessWidget {
                             borderRadius: BorderRadius.circular(18),
                             color: selectedIndex == i
                                 ? (AppColors.light
-                                      ? AppColors.secondary
+                                      ? AppColors.header
                                       : AppColors.primary.withValues(
                                           alpha: 0.28,
                                         ))
@@ -1277,12 +1435,14 @@ class _NavBar extends StatelessWidget {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
-                                _items[i].icon,
-                                size: 22,
-                                color: selectedIndex == i
-                                    ? AppColors.onHeader
-                                    : idle,
+                              CustomPaint(
+                                size: const Size(22, 22),
+                                painter: _NavGlyph(
+                                  _items[i].glyph,
+                                  selectedIndex == i
+                                      ? AppColors.onHeader
+                                      : idle,
+                                ),
                               ),
                               const SizedBox(height: 4),
                               Text(
@@ -1308,6 +1468,80 @@ class _NavBar extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The design's nav icons (24-unit stroke glyphs), drawn directly so they
+/// match the artboards rather than the nearest Material icon.
+class _NavGlyph extends CustomPainter {
+  const _NavGlyph(this.glyph, this.color);
+  final int glyph;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final k = size.width / 24;
+    canvas.scale(k);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = color;
+    final path = Path();
+    switch (glyph) {
+      case 0:
+        path
+          ..moveTo(12, 3)
+          ..relativeLineTo(8, 3)
+          ..relativeLineTo(0, 6)
+          ..relativeCubicTo(0, 5, -3.5, 8, -8, 9)
+          ..relativeCubicTo(-4.5, -1, -8, -4, -8, -9)
+          ..lineTo(4, 6)
+          ..close();
+      case 1:
+        path
+          ..addOval(Rect.fromCircle(center: const Offset(9, 8), radius: 3.5))
+          ..moveTo(2.5, 20)
+          ..relativeCubicTo(0, -3.5, 3, -6, 6.5, -6)
+          ..relativeCubicTo(3.5, 0, 6.5, 2.5, 6.5, 6)
+          ..moveTo(16, 4.5)
+          ..arcToPoint(
+            const Offset(16, 11.5),
+            radius: const Radius.circular(3.5),
+          )
+          ..moveTo(18, 14)
+          ..relativeCubicTo(2.2, 0.6, 3.5, 2.6, 3.5, 6);
+      case 2:
+        path
+          ..addOval(Rect.fromCircle(center: const Offset(12, 12), radius: 9))
+          ..moveTo(12, 7)
+          ..relativeLineTo(0, 5)
+          ..relativeLineTo(3, 2);
+      default:
+        path
+          ..addOval(Rect.fromCircle(center: const Offset(12, 12), radius: 3))
+          ..moveTo(12, 2)
+          ..relativeLineTo(0, 3)
+          ..moveTo(12, 19)
+          ..relativeLineTo(0, 3)
+          ..moveTo(2, 12)
+          ..relativeLineTo(3, 0)
+          ..moveTo(19, 12)
+          ..relativeLineTo(3, 0)
+          ..moveTo(4.9, 4.9)
+          ..relativeLineTo(2.1, 2.1)
+          ..moveTo(17, 17)
+          ..relativeLineTo(2.1, 2.1)
+          ..moveTo(4.9, 19.1)
+          ..lineTo(7, 17)
+          ..moveTo(17, 7)
+          ..relativeLineTo(2.1, -2.1);
+    }
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_NavGlyph old) => old.glyph != glyph || old.color != color;
 }
 
 /// A segmented control whose selected pill slides between options.

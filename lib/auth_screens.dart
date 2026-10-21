@@ -155,12 +155,16 @@ class LoginScreen extends StatefulWidget {
     required this.onLogin,
     required this.onGoogle,
     required this.onCreateAccount,
+    this.onForgotPassword,
   });
 
   /// Each callback returns an error message to show, or null on success.
   final Future<String?> Function(String username, String password) onLogin;
   final Future<String?> Function() onGoogle;
   final VoidCallback onCreateAccount;
+
+  /// Sends a reset email; returns an error message, or null when sent.
+  final Future<String?> Function(String email)? onForgotPassword;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -235,9 +239,14 @@ class _LoginScreenState extends State<LoginScreen> {
         Align(
           alignment: Alignment.centerRight,
           child: GestureDetector(
-            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Password reset arrives with cloud sign-in.'),
+            onTap: () => Navigator.of(context).push(
+              SafeRoute<void>(
+                builder: (_) => ForgotPasswordScreen(
+                  initial: _username.text.contains('@')
+                      ? _username.text.trim()
+                      : '',
+                  onSend: widget.onForgotPassword ?? (_) async => null,
+                ),
               ),
             ),
             child: Padding(
@@ -284,7 +293,12 @@ class RegisterScreen extends StatefulWidget {
     required this.onBackToLogin,
   });
 
-  final Future<String?> Function(String email, String username, String password)
+  final Future<String?> Function(
+    String email,
+    String username,
+    String password,
+    String name,
+  )
   onRegister;
   final Future<String?> Function() onGoogle;
   final VoidCallback onBackToLogin;
@@ -294,6 +308,7 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
+  final _name = TextEditingController();
   final _email = TextEditingController();
   final _username = TextEditingController();
   final _password = TextEditingController();
@@ -316,6 +331,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   void dispose() {
+    _name.dispose();
     _email.dispose();
     _username.dispose();
     _password.dispose();
@@ -323,9 +339,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _submit() {
+    final name = _name.text.trim();
     final email = _email.text.trim();
     final u = _username.text.trim();
     final p = _password.text;
+    if (name.isEmpty) {
+      setState(() => _error = 'Enter your full name.');
+      return;
+    }
     if (!email.contains('@') || !email.contains('.')) {
       setState(() => _error = 'Enter a valid email address.');
       return;
@@ -338,7 +359,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() => _error = 'Password needs at least 6 characters.');
       return;
     }
-    _run(() => widget.onRegister(email, u, p));
+    _run(() => widget.onRegister(email, u, p, name));
   }
 
   @override
@@ -368,6 +389,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ],
       ),
       children: [
+        _Field(
+          controller: _name,
+          label: 'Full name',
+          icon: Icons.person_outline,
+          textInputAction: TextInputAction.next,
+        ),
         _Field(
           controller: _email,
           label: 'Email',
@@ -459,6 +486,140 @@ class HeaderBackIcon extends StatelessWidget {
         color: AppColors.light ? Colors.white : AppColors.surface,
       ),
       child: Icon(Icons.arrow_back_rounded, color: AppColors.text, size: 20),
+    ),
+  );
+}
+
+/// Forgot password: one field, one button, then a calm confirmation. The
+/// confirmation never says whether the email is registered.
+class ForgotPasswordScreen extends StatefulWidget {
+  const ForgotPasswordScreen({
+    super.key,
+    required this.onSend,
+    this.initial = '',
+  });
+
+  final Future<String?> Function(String email) onSend;
+  final String initial;
+
+  @override
+  State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
+}
+
+class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
+  late final _email = TextEditingController(text: widget.initial);
+  String? _error;
+  bool _busy = false;
+  bool _sent = false;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final email = _email.text.trim();
+    if (!email.contains('@') || !email.contains('.')) {
+      setState(() => _error = 'Enter the email you signed up with.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final error = await widget.onSend(email);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _error = error;
+      _sent = error == null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: Colors.transparent,
+    body: HeaderPage(
+      headerHeight: 262,
+      overlap: 20,
+      bottomPadding: 40,
+      header: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Wordmark(),
+              const Spacer(),
+              HeaderBackIcon(onTap: () => Navigator.of(context).maybePop()),
+            ],
+          ),
+          const SizedBox(height: 18),
+          const HeaderTitle(
+            'Forgot your password?',
+            subtitle: 'We will email you a link to choose a new one.',
+            size: 30,
+          ),
+        ],
+      ),
+      children: [
+        if (!_sent) ...[
+          _Field(
+            controller: _email,
+            label: 'Email',
+            icon: Icons.mail_outline,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _send(),
+            shadow: true,
+          ),
+          if (_error != null) _errorText(context, _error!),
+          const SizedBox(height: 6),
+          BerryButton(
+            label: _busy ? 'Sending…' : 'Send reset link',
+            busy: _busy,
+            onTap: _send,
+          ),
+        ] else
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              color: AppColors.light
+                  ? const Color(0xFFE4F2E9)
+                  : AppColors.surface,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.mark_email_read_outlined,
+                  color: AppColors.light
+                      ? const Color(0xFF1E4A33)
+                      : AppColors.success,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'If an account uses that email, a reset link is on its way. Check your inbox and spam.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.light
+                          ? const Color(0xFF1E4A33)
+                          : null,
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+      footer: _footer(
+        context,
+        'Remembered it?',
+        'Back to sign in',
+        () => Navigator.of(context).maybePop(),
+      ),
     ),
   );
 }
