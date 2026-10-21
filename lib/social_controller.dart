@@ -77,6 +77,18 @@ class SocialController extends ChangeNotifier {
       );
     }
   }
+  SocialController.authenticated({required String uid, required String name}) {
+    _profiles.clear();
+    _profiles.add(DemoPerson(id: uid, name: name.isEmpty ? 'SafeHer user' : name, username: ''));
+    _currentUserId = uid;
+    signedIn = true;
+    _lockedIdentity = true;
+  }
+  bool _lockedIdentity = false;
+  bool get cloudConnected => false;
+  String? get email => null;
+  Future<LocalSosEvent> activateSos() async => createSos();
+  Future<void> lookupUsername(String value) async {}
   factory SocialController.fromSnapshot(String value) {
     final m = jsonDecode(value) as Map<String, dynamic>;
     if (m['version'] != 1) {
@@ -309,6 +321,7 @@ class SocialController extends ChangeNotifier {
     orElse: () => throw StateError('Unknown account.'),
   );
   void switchProfile(String id) {
+    if (_lockedIdentity) throw StateError('Sign out to change accounts.');
     person(id);
     if (id == _currentUserId) return;
     _currentUserId = id;
