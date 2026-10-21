@@ -22,7 +22,17 @@ String normalizeUsername(String input) => input.trim().toLowerCase();
 /// username or the password was the wrong half.
 const wrongCredentials = 'Username or password is incorrect.';
 
+/// A public, searchable account entry (never includes the email).
+class RemoteProfile {
+  const RemoteProfile({required this.uid, required this.username});
+  final String uid;
+  final String username;
+}
+
 abstract class AuthService {
+  /// Finds registered accounts whose username starts with [prefix].
+  Future<List<RemoteProfile>> searchUsers(String prefix);
+
   /// Creates the account and reserves the username. Returns the username.
   Future<String> register({
     required String email,
@@ -70,7 +80,42 @@ class FirebaseAuthService implements AuthService {
       'createdAt': FieldValue.serverTimestamp(),
     });
     tx.set(_db.collection('users').doc(user.uid), {'username': username});
+    tx.set(_db.collection('profiles').doc(username), {
+      'uid': user.uid,
+      'username': username,
+    });
   });
+
+  /// Accounts made before the searchable directory existed get an entry the
+  /// next time they sign in. Best effort: a failure must not block sign-in.
+  Future<void> _ensureProfile(String uid, String username) async {
+    if (username.isEmpty) return;
+    try {
+      final ref = _db.collection('profiles').doc(username);
+      if (!(await ref.get()).exists) {
+        await ref.set({'uid': uid, 'username': username});
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Future<List<RemoteProfile>> searchUsers(String prefix) async {
+    final term = normalizeUsername(prefix).replaceFirst('@', '');
+    if (term.isEmpty || !RegExp(r'^[a-z0-9_]+$').hasMatch(term)) return [];
+    final snap = await _db
+        .collection('profiles')
+        .where(FieldPath.documentId, isGreaterThanOrEqualTo: term)
+        .where(FieldPath.documentId, isLessThan: '$term\uf8ff')
+        .limit(10)
+        .get();
+    return [
+      for (final d in snap.docs)
+        RemoteProfile(
+          uid: d.data()['uid'] as String,
+          username: d.data()['username'] as String,
+        ),
+    ];
+  }
 
   @override
   Future<String> register({
@@ -124,14 +169,20 @@ class FirebaseAuthService implements AuthService {
           password: password,
         );
         final profile = await _db.collection('users').doc(cred.user!.uid).get();
-        return (profile.data()?['username'] as String?) ?? '';
+        final found = (profile.data()?['username'] as String?) ?? '';
+        await _ensureProfile(cred.user!.uid, found);
+        return found;
       }
       final doc = await _name(name).get();
       final email = doc.data()?['email'] as String?;
       // A never-registered username has no document: same message as a bad
       // password.
       if (email == null) throw const AuthFailure(wrongCredentials);
-      await _auth.signInWithEmailAndPassword(email: email, password: password);
+      final cred = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      await _ensureProfile(cred.user!.uid, name);
       return name;
     } on FirebaseAuthException catch (e) {
       if (e.code == 'network-request-failed') {
@@ -247,6 +298,9 @@ class LocalAuthService implements AuthService {
     }
     return name;
   }
+
+  @override
+  Future<List<RemoteProfile>> searchUsers(String prefix) async => [];
 
   @override
   Future<String> google() async => '';

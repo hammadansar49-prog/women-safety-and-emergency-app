@@ -1,3 +1,4 @@
+import 'auth_service.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'chat_screen.dart';
@@ -63,8 +64,12 @@ class ContactsScreen extends StatefulWidget {
     super.key,
     required this.social,
     this.safetyBannerBuilder,
+    this.searchRemote,
   });
   final SocialController social;
+
+  /// Searches accounts across the whole service (null = local only).
+  final Future<List<RemoteProfile>> Function(String prefix)? searchRemote;
   final WidgetBuilder? safetyBannerBuilder;
   @override
   State<ContactsScreen> createState() => _ContactsScreenState();
@@ -72,7 +77,28 @@ class ContactsScreen extends StatefulWidget {
 
 class _ContactsScreenState extends State<ContactsScreen> {
   String query = '';
+  List<RemoteProfile> _remote = [];
+  int _searchToken = 0;
   SocialController get social => widget.social;
+
+  Future<void> _onQuery(String value) async {
+    setState(() => query = value);
+    final token = ++_searchToken;
+    final search = widget.searchRemote;
+    if (search == null || value.trim().isEmpty) {
+      setState(() => _remote = []);
+      return;
+    }
+    // Short debounce so typing does not fire a query per keystroke.
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    if (token != _searchToken) return;
+    try {
+      final found = await search(value);
+      if (mounted && token == _searchToken) setState(() => _remote = found);
+    } catch (_) {
+      if (mounted && token == _searchToken) setState(() => _remote = []);
+    }
+  }
 
   void _action(VoidCallback action) {
     try {
@@ -152,19 +178,27 @@ class _ContactsScreenState extends State<ContactsScreen> {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: social,
     builder: (context, _) {
-      final results = social.search(query);
+      final local = social.search(query);
+      final known = {for (final p in local) p.username.toLowerCase()};
+      final results = [
+        ...local,
+        for (final r in _remote)
+          if (r.uid != social.currentUserId &&
+              !known.contains(r.username.toLowerCase()))
+            DemoPerson(id: r.uid, name: r.username, username: r.username),
+      ];
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Friends & chats',
+            'Buddies',
             style: Theme.of(
               context,
             ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           const Text(
-            'Tap a friend to chat. Hold for 1.5 seconds to choose favorite SOS contacts, or use the three-dot menu.',
+            'Tap a buddy to chat. Hold for 1.5 seconds to choose favorite SOS contacts, or use the three-dot menu.',
           ),
           const SizedBox(height: 20),
           TextField(
@@ -175,7 +209,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
               prefixIcon: Icon(Icons.search),
               border: OutlineInputBorder(),
             ),
-            onChanged: (value) => setState(() => query = value),
+            onChanged: _onQuery,
           ),
           if (query.trim().isNotEmpty) ...[
             const SizedBox(height: 12),
@@ -203,8 +237,10 @@ class _ContactsScreenState extends State<ContactsScreen> {
                         const Chip(label: Text('Request received'))
                       else
                         FilledButton.tonal(
-                          onPressed: () =>
-                              _action(() => social.requestFriend(person.id)),
+                          onPressed: () => _action(() {
+                            social.adoptRemote(person.id, person.username);
+                            social.requestFriend(person.id);
+                          }),
                           child: const Text('Send request'),
                         ),
                     ],

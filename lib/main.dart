@@ -535,6 +535,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
                           key: ValueKey(social.currentUserId),
                           social: social,
                           safetyBannerBuilder: _routeSosBanner,
+                          searchRemote: auth.searchUsers,
                         ),
                       if (page == 2) ..._history(),
                       if (page == 3) ..._settings(),
@@ -568,12 +569,6 @@ class _SafeHerShellState extends State<SafeHerShell> {
       24 + 88 + media.padding.bottom,
     );
   }
-
-  /// A segmented control whose labels never wrap, however narrow the phone.
-  Widget _segLabel(String text) => FittedBox(
-    fit: BoxFit.scaleDown,
-    child: Text(text, maxLines: 1, softWrap: false),
-  );
 
   Widget _welcome() {
     final theme = Theme.of(context);
@@ -749,7 +744,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
       TextButton.icon(
         onPressed: () => setState(() => page = 1),
         icon: const Icon(Icons.people_outline),
-        label: const Text('Manage friends & SOS favorites'),
+        label: const Text('Manage buddies & SOS favorites'),
       ),
       _panel(
         Icons.location_off_outlined,
@@ -790,17 +785,14 @@ class _SafeHerShellState extends State<SafeHerShell> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             const SizedBox(height: 12),
-            SegmentedButton<ThemeMode>(
-              segments: [
-                ButtonSegment(value: ThemeMode.system, label: _segLabel('System')),
-                ButtonSegment(value: ThemeMode.light, label: _segLabel('Light')),
-                ButtonSegment(value: ThemeMode.dark, label: _segLabel('Dark')),
-              ],
-              showSelectedIcon: false,
-              expandedInsets: EdgeInsets.zero,
-              selected: {widget.themeMode},
-              onSelectionChanged: (values) =>
-                  widget.onThemeChanged?.call(values.first),
+            _Segments<ThemeMode>(
+              options: const {
+                ThemeMode.system: 'System',
+                ThemeMode.light: 'Light',
+                ThemeMode.dark: 'Dark',
+              },
+              selected: widget.themeMode,
+              onChanged: (value) => widget.onThemeChanged?.call(value),
             ),
             const SizedBox(height: 12),
             const Text(
@@ -821,18 +813,12 @@ class _SafeHerShellState extends State<SafeHerShell> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             const SizedBox(height: 12),
-            SegmentedButton<int>(
-              segments: [
-                ButtonSegment(value: 3, label: _segLabel('3 sec')),
-                ButtonSegment(value: 5, label: _segLabel('5 sec')),
-                ButtonSegment(value: 10, label: _segLabel('10 sec')),
-              ],
-              showSelectedIcon: false,
-              expandedInsets: EdgeInsets.zero,
-              selected: {emergency.countdownSeconds},
-              onSelectionChanged: (values) => setState(() {
-                emergency.countdownSeconds = values.first;
-                social.setCountdown(values.first);
+            _Segments<int>(
+              options: const {3: '3 sec', 5: '5 sec', 10: '10 sec'},
+              selected: emergency.countdownSeconds,
+              onChanged: (value) => setState(() {
+                emergency.countdownSeconds = value;
+                social.setCountdown(value);
               }),
             ),
           ],
@@ -945,7 +931,7 @@ class _GlassNavBar extends StatelessWidget {
     (
       icon: Icons.people_outline,
       active: Icons.people_rounded,
-      label: 'Contacts',
+      label: 'Buddies',
     ),
     (icon: Icons.history, active: Icons.history_rounded, label: 'Activity'),
     (
@@ -1122,5 +1108,67 @@ class _BrandMarkState extends State<_BrandMark>
         ),
       );
     },
+  );
+}
+
+/// A segmented control with equal-width options. Labels are single-line and
+/// scale down, so they never wrap on narrow phones.
+class _Segments<T> extends StatelessWidget {
+  const _Segments({
+    required this.options,
+    required this.selected,
+    required this.onChanged,
+  });
+  final Map<T, String> options;
+  final T selected;
+  final ValueChanged<T> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: AppColors.border),
+    ),
+    child: Row(
+      children: [
+        for (final entry in options.entries)
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onChanged(entry.key),
+              child: Semantics(
+                button: true,
+                selected: entry.key == selected,
+                label: entry.value,
+                child: Container(
+                  height: 44,
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(999),
+                    color: entry.key == selected
+                        ? AppColors.accent
+                        : Colors.transparent,
+                  ),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      entry.value,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: entry.key == selected
+                            ? Colors.black
+                            : AppColors.text,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
   );
 }

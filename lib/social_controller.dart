@@ -350,6 +350,17 @@ class SocialController extends ChangeNotifier {
       (p) => p.id != currentUserId && areFriends(currentUserId, p.id),
     ),
   );
+  /// Adds an account found through cloud search so it can be requested,
+  /// reusing the existing entry when it is already known.
+  DemoPerson adoptRemote(String id, String username) {
+    final existing = _profiles.indexWhere((p) => p.id == id);
+    if (existing != -1) return _profiles[existing];
+    final person = DemoPerson(id: id, name: username, username: username);
+    _profiles.add(person);
+    notifyListeners();
+    return person;
+  }
+
   List<DemoPerson> search(String query) {
     final term = query.trim().toLowerCase().replaceFirst(RegExp(r'^@'), '');
     return List.unmodifiable(
