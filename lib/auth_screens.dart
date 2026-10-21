@@ -314,9 +314,8 @@ class _LoginScreenState extends State<LoginScreen> {
         index: 1,
         child: _GlassField(
           controller: _username,
-          label: 'Username',
-          icon: Icons.alternate_email,
-          prefixText: '@',
+          label: 'Username or email',
+          icon: Icons.person_outline,
           textInputAction: TextInputAction.next,
         ),
       ),

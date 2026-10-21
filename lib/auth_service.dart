@@ -30,7 +30,7 @@ abstract class AuthService {
     required String password,
   });
 
-  /// Signs in an existing account by username. Returns the username.
+  /// Signs in by username or email. Returns the account's username.
   Future<String> login({required String username, required String password});
 
   /// Shows the Google account chooser. Returns the account's username, or an
@@ -117,6 +117,15 @@ class FirebaseAuthService implements AuthService {
   }) async {
     final name = normalizeUsername(username);
     try {
+      if (name.contains('@')) {
+        // Signed in by email: the username comes from the account's profile.
+        final cred = await _auth.signInWithEmailAndPassword(
+          email: name,
+          password: password,
+        );
+        final profile = await _db.collection('users').doc(cred.user!.uid).get();
+        return (profile.data()?['username'] as String?) ?? '';
+      }
       final doc = await _name(name).get();
       final email = doc.data()?['email'] as String?;
       // A never-registered username has no document: same message as a bad
@@ -188,6 +197,7 @@ class FirebaseAuthService implements AuthService {
 /// cloud ones: unique usernames, salted password hashes, generic login errors.
 class LocalAuthService implements AuthService {
   final Map<String, _Account> _byName = {};
+  final Map<String, String> _nameByEmail = {};
   final Set<String> _emails = {};
   final Set<String> _everTaken = {};
 
@@ -220,6 +230,7 @@ class LocalAuthService implements AuthService {
     _byName[name] = _Account(salt, _hash(salt, password));
     _everTaken.add(name);
     _emails.add(mail);
+    _nameByEmail[mail] = name;
     return name;
   }
 
@@ -228,7 +239,8 @@ class LocalAuthService implements AuthService {
     required String username,
     required String password,
   }) async {
-    final name = normalizeUsername(username);
+    var name = normalizeUsername(username);
+    if (name.contains('@')) name = _nameByEmail[name] ?? '';
     final account = _byName[name];
     if (account == null || account.hash != _hash(account.salt, password)) {
       throw const AuthFailure(wrongCredentials);
