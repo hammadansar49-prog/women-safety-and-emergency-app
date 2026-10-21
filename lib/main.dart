@@ -527,7 +527,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 650),
                   child: ListView(
-                    padding: const EdgeInsets.all(24),
+                    padding: _pagePadding(context),
                     children: [
                       if (page == 0) ..._home(),
                       if (page == 1)
@@ -554,6 +554,25 @@ class _SafeHerShellState extends State<SafeHerShell> {
         ),
       );
     },
+  );
+
+  /// Gutters shrink on narrow phones, and the bottom inset clears the
+  /// floating nav bar (which overlays the body) plus the system gesture area.
+  EdgeInsets _pagePadding(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final side = media.size.width < 360 ? 16.0 : 24.0;
+    return EdgeInsets.fromLTRB(
+      side,
+      24,
+      side,
+      24 + 88 + media.padding.bottom,
+    );
+  }
+
+  /// A segmented control whose labels never wrap, however narrow the phone.
+  Widget _segLabel(String text) => FittedBox(
+    fit: BoxFit.scaleDown,
+    child: Text(text, maxLines: 1, softWrap: false),
   );
 
   Widget _welcome() {
@@ -772,11 +791,13 @@ class _SafeHerShellState extends State<SafeHerShell> {
             ),
             const SizedBox(height: 12),
             SegmentedButton<ThemeMode>(
-              segments: const [
-                ButtonSegment(value: ThemeMode.system, label: Text('System')),
-                ButtonSegment(value: ThemeMode.light, label: Text('Light')),
-                ButtonSegment(value: ThemeMode.dark, label: Text('Dark')),
+              segments: [
+                ButtonSegment(value: ThemeMode.system, label: _segLabel('System')),
+                ButtonSegment(value: ThemeMode.light, label: _segLabel('Light')),
+                ButtonSegment(value: ThemeMode.dark, label: _segLabel('Dark')),
               ],
+              showSelectedIcon: false,
+              expandedInsets: EdgeInsets.zero,
               selected: {widget.themeMode},
               onSelectionChanged: (values) =>
                   widget.onThemeChanged?.call(values.first),
@@ -801,11 +822,13 @@ class _SafeHerShellState extends State<SafeHerShell> {
             ),
             const SizedBox(height: 12),
             SegmentedButton<int>(
-              segments: const [
-                ButtonSegment(value: 3, label: Text('3 sec')),
-                ButtonSegment(value: 5, label: Text('5 sec')),
-                ButtonSegment(value: 10, label: Text('10 sec')),
+              segments: [
+                ButtonSegment(value: 3, label: _segLabel('3 sec')),
+                ButtonSegment(value: 5, label: _segLabel('5 sec')),
+                ButtonSegment(value: 10, label: _segLabel('10 sec')),
               ],
+              showSelectedIcon: false,
+              expandedInsets: EdgeInsets.zero,
               selected: {emergency.countdownSeconds},
               onSelectionChanged: (values) => setState(() {
                 emergency.countdownSeconds = values.first;
