@@ -8,6 +8,7 @@ import 'username_screen.dart';
 import 'local_store.dart';
 import 'auth_screens.dart';
 import 'auth_service.dart';
+import 'location_service.dart';
 import 'privacy_screen.dart';
 import 'profile_photo.dart';
 import 'sos_shortcut.dart';
@@ -155,6 +156,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
   late final SosShortcut shortcut;
   late final SocialController social;
   late final AuthService auth;
+  final tracker = LocationTracker();
   String? sosOwner;
   String? activeEventId;
 
@@ -199,6 +201,11 @@ class _SafeHerShellState extends State<SafeHerShell> {
         sosOwner = event.senderId;
         activeEventId = event.id;
         emergency.status = EmergencyStatus.active;
+        // The app was reopened mid-SOS: resume the live position stream.
+        final resumeId = event.id;
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _startTracking(resumeId),
+        );
       }
     }
     emergency.addListener(_syncEmergency);
@@ -393,6 +400,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
           throw StateError('Account changed during countdown.');
         }
         activeEventId = social.createSos().id;
+        _startTracking(activeEventId!);
       } on StateError {
         emergency.cancel();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -437,10 +445,45 @@ class _SafeHerShellState extends State<SafeHerShell> {
     },
   );
 
+  /// Streams the position into the active SOS until it is stopped.
+  void _startTracking(String eventId) {
+    tracker.start((fix) {
+      if (!mounted) return;
+      social.updateSosLocation(
+        eventId,
+        fix.latitude,
+        fix.longitude,
+        fix.time,
+      );
+    }).then((started) {
+      if (!started && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Location is off or not allowed, so your position is not being shared.',
+            ),
+          ),
+        );
+      }
+    });
+  }
+
   void _finishSos({required bool cancelled}) {
     if (social.currentUserId != sosOwner) return;
-    if (activeEventId != null) {
-      social.finishSos(activeEventId!, cancelled: cancelled);
+    final eventId = activeEventId;
+    if (eventId != null) {
+      // Tracking ends with the SOS; the last fix becomes the "ended here" point.
+      tracker.stop().then((last) {
+        if (last != null) {
+          social.updateSosLocation(
+            eventId,
+            last.latitude,
+            last.longitude,
+            last.time,
+          );
+        }
+      });
+      social.finishSos(eventId, cancelled: cancelled);
     }
     if (cancelled) {
       emergency.cancel();

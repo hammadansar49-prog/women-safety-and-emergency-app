@@ -58,12 +58,43 @@ class LocalSosEvent {
     required List<String> recipientIds,
     required this.status,
     required this.createdAt,
+    this.lastLat,
+    this.lastLng,
+    this.lastLocationAt,
+    this.endedAt,
   }) : recipientIds = List.unmodifiable(recipientIds);
   final String id;
   final String senderId;
   final List<String> recipientIds;
   final LocalSosStatus status;
   final DateTime createdAt;
+
+  /// The most recent live position while the SOS runs; once it ends this is
+  /// the "ended here" point.
+  final double? lastLat;
+  final double? lastLng;
+  final DateTime? lastLocationAt;
+
+  /// When the SOS stopped (null while active).
+  final DateTime? endedAt;
+
+  LocalSosEvent copyWith({
+    LocalSosStatus? status,
+    double? lastLat,
+    double? lastLng,
+    DateTime? lastLocationAt,
+    DateTime? endedAt,
+  }) => LocalSosEvent(
+    id: id,
+    senderId: senderId,
+    recipientIds: recipientIds,
+    status: status ?? this.status,
+    createdAt: createdAt,
+    lastLat: lastLat ?? this.lastLat,
+    lastLng: lastLng ?? this.lastLng,
+    lastLocationAt: lastLocationAt ?? this.lastLocationAt,
+    endedAt: endedAt ?? this.endedAt,
+  );
 }
 
 /// Local account state. Persistence is injected; networking is not connected.
@@ -145,6 +176,12 @@ class SocialController extends ChangeNotifier {
           recipientIds: List<String>.from(r['to']),
           status: LocalSosStatus.values.byName(r['status']),
           createdAt: DateTime.parse(r['time']),
+          lastLat: (r['lat'] as num?)?.toDouble(),
+          lastLng: (r['lng'] as num?)?.toDouble(),
+          lastLocationAt: r['locAt'] == null
+              ? null
+              : DateTime.parse(r['locAt']),
+          endedAt: r['endedAt'] == null ? null : DateTime.parse(r['endedAt']),
         ),
       );
     }
@@ -189,6 +226,10 @@ class SocialController extends ChangeNotifier {
           'to': r.recipientIds,
           'status': r.status.name,
           'time': r.createdAt.toIso8601String(),
+          'lat': r.lastLat,
+          'lng': r.lastLng,
+          'locAt': r.lastLocationAt?.toIso8601String(),
+          'endedAt': r.endedAt?.toIso8601String(),
         },
     ],
   });
@@ -597,12 +638,27 @@ class SocialController extends ChangeNotifier {
     if (event.status != LocalSosStatus.active) {
       throw StateError('SOS has already ended.');
     }
-    _events[index] = LocalSosEvent(
-      id: event.id,
-      senderId: event.senderId,
-      recipientIds: event.recipientIds,
-      createdAt: event.createdAt,
+    _events[index] = event.copyWith(
       status: cancelled ? LocalSosStatus.cancelled : LocalSosStatus.resolved,
+      endedAt: DateTime.now(),
+    );
+    notifyListeners();
+  }
+
+  /// Records the latest live position on an active SOS. Called for every fix
+  /// while the SOS runs, and once more with the final fix when it ends.
+  void updateSosLocation(
+    String eventId,
+    double lat,
+    double lng,
+    DateTime at,
+  ) {
+    final index = _events.indexWhere((e) => e.id == eventId);
+    if (index < 0 || _events[index].senderId != currentUserId) return;
+    _events[index] = _events[index].copyWith(
+      lastLat: lat,
+      lastLng: lng,
+      lastLocationAt: at,
     );
     notifyListeners();
   }
