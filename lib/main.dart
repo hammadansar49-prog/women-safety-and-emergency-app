@@ -8,6 +8,7 @@ import 'username_screen.dart';
 import 'local_store.dart';
 import 'auth_screens.dart';
 import 'auth_service.dart';
+import 'privacy_screen.dart';
 import 'profile_photo.dart';
 import 'sos_shortcut.dart';
 import 'theme/app_theme.dart';
@@ -171,6 +172,12 @@ class _SafeHerShellState extends State<SafeHerShell> {
     super.initState();
     social = widget.social ?? SocialController(newAccount: true);
     auth = widget.auth ?? _defaultAuth();
+    // Local preview mode: an already signed-in profile also gets the demo buddy.
+    if (auth is LocalAuthService &&
+        social.signedIn &&
+        social.currentUser.username.isNotEmpty) {
+      social.seedDemoFriend('ayesha');
+    }
     shortcut = SosShortcut(
       selectedKey: social.shortcutKey,
       onSos: () {
@@ -861,7 +868,10 @@ class _SafeHerShellState extends State<SafeHerShell> {
     _panel(
       Icons.privacy_tip_outlined,
       'Privacy first',
-      'Control who receives your SOS in Contacts. You can remove a favorite or revoke approval at any time.',
+      'Tap to see exactly what is shared, with whom, and how you stay in control.',
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const PrivacyGuideScreen()),
+      ),
     ),
   ];
 

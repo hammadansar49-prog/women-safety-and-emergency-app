@@ -462,6 +462,11 @@ class SocialController extends ChangeNotifier {
   void seedDemoFriend(String friendId) {
     if (friendId == currentUserId) return;
     if (areFriends(currentUserId, friendId)) return;
+    _requests.removeWhere(
+      (r) =>
+          (r.fromId == currentUserId && r.toId == friendId) ||
+          (r.fromId == friendId && r.toId == currentUserId),
+    );
     _friendships.add(_pair(currentUserId, friendId));
     _messages.add(
       ChatMessage(
