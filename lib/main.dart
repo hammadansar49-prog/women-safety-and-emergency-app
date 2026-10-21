@@ -6,8 +6,15 @@ import 'social_controller.dart';
 import 'contacts_screen.dart';
 import 'username_screen.dart';
 import 'local_store.dart';
+import 'auth_screens.dart';
 import 'profile_photo.dart';
 import 'sos_shortcut.dart';
+import 'theme/app_theme.dart';
+import 'theme/tokens.dart';
+import 'ui/aurora_background.dart';
+import 'ui/glass.dart';
+import 'ui/motion.dart';
+import 'ui/sos_button.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -77,26 +84,14 @@ class _SafeHerAppState extends State<SafeHerApp> {
     builder: (context, _) => MaterialApp(
       title: 'SafeHer',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6552A3)),
-        scaffoldBackgroundColor: const Color(0xFFF7F6FB),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFFF7F6FB),
-          centerTitle: false,
-        ),
-        cardTheme: const CardThemeData(elevation: 0, color: Colors.white),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6552A3),
-          brightness: Brightness.dark,
-        ),
-        appBarTheme: const AppBarTheme(centerTitle: false),
-        cardTheme: const CardThemeData(elevation: 0),
-      ),
+      // One locked dark "aurora glass" theme. The appearance setting is kept so
+      // nothing breaks, but both slots resolve to the same theme for now — a
+      // light variant needs its own generated companion palette.
+      theme: AppTheme.build(),
+      darkTheme: AppTheme.build(),
       themeMode: themeMode,
+      builder: (context, child) =>
+          AuroraBackground(child: child ?? const SizedBox.shrink()),
       home: SafeHerShell(
         social: social,
         themeMode: themeMode,
@@ -120,13 +115,24 @@ class SafeHerShell extends StatefulWidget {
   State<SafeHerShell> createState() => _SafeHerShellState();
 }
 
+/// The auth surface shown before the user reaches the app.
+enum _AuthStage { welcome, login, register }
+
 class _SafeHerShellState extends State<SafeHerShell> {
   final emergency = EmergencyController();
   late final SosShortcut shortcut;
   late final SocialController social;
   String? sosOwner;
   String? activeEventId;
-  bool onboarded = false;
+
+  /// Which auth surface is showing while the user is not yet signed in.
+  _AuthStage _stage = _AuthStage.welcome;
+
+  /// "In the app" means signed in AND a username exists. Google sign-in lands
+  /// signed-in-but-no-username, which routes to the username step first.
+  bool get onboarded =>
+      social.signedIn && social.currentUser.username.isNotEmpty;
+
   int page = 0;
   @override
   void initState() {
@@ -146,7 +152,6 @@ class _SafeHerShellState extends State<SafeHerShell> {
         }
       },
     );
-    onboarded = social.signedIn;
     emergency.countdownSeconds = social.countdown;
     for (final event in social.visibleEvents) {
       if (event.senderId == social.currentUserId &&
@@ -157,6 +162,44 @@ class _SafeHerShellState extends State<SafeHerShell> {
       }
     }
     emergency.addListener(_syncEmergency);
+  }
+
+  // --- Auth flow -----------------------------------------------------------
+  // These drive navigation and "sign in" against local data. Real
+  // email/password and Google authentication are wired to Firebase Auth in a
+  // later step; today the identity is local, but the flow is the real one.
+
+  void _handleLogin(String username, String password) {
+    try {
+      social.claimUsername(username);
+      social.setSignedIn(true);
+    } on StateError catch (error) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+      return;
+    }
+    setState(() {});
+  }
+
+  void _handleRegister(String email, String username, String password) {
+    try {
+      social.claimUsername(username);
+      social.setSignedIn(true);
+    } on StateError catch (error) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+      return;
+    }
+    setState(() {});
+  }
+
+  void _handleGoogle() {
+    // Simulated Google sign-in: signs in without a username, so the next
+    // screen is the username step before entering the app.
+    social.setSignedIn(true);
+    setState(() {});
   }
 
   Widget _storageStatus() {
@@ -230,7 +273,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
                                     try {
                                       await social.flush();
                                       shortcut.enable(false);
-                                      social.setSignedIn(false);
+                                      social.signOut();
                                       await social.flush();
                                     } catch (_) {
                                       return;
@@ -240,7 +283,7 @@ class _SafeHerShellState extends State<SafeHerShell> {
                                     }
                                     Navigator.of(routeContext).pop();
                                     setState(() {
-                                      onboarded = false;
+                                      _stage = _AuthStage.welcome;
                                       page = 0;
                                     });
                                   },
@@ -357,7 +400,27 @@ class _SafeHerShellState extends State<SafeHerShell> {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: Listenable.merge([emergency, social]),
     builder: (context, _) {
-      if (!onboarded) return _welcome();
+      // Not signed in → the auth sub-flow.
+      if (!social.signedIn) {
+        switch (_stage) {
+          case _AuthStage.welcome:
+            return _welcome();
+          case _AuthStage.login:
+            return LoginScreen(
+              onLogin: _handleLogin,
+              onGoogle: _handleGoogle,
+              onCreateAccount: () =>
+                  setState(() => _stage = _AuthStage.register),
+            );
+          case _AuthStage.register:
+            return RegisterScreen(
+              onRegister: _handleRegister,
+              onGoogle: _handleGoogle,
+              onBackToLogin: () => setState(() => _stage = _AuthStage.login),
+            );
+        }
+      }
+      // Signed in (e.g. via Google) but no username yet → choose one.
       if (social.currentUser.username.isEmpty) {
         return UsernameScreen(
           key: ValueKey(social.currentUserId),
@@ -453,151 +516,156 @@ class _SafeHerShellState extends State<SafeHerShell> {
             ),
           ],
         ),
-        bottomNavigationBar: NavigationBar(
+        extendBody: true,
+        backgroundColor: Colors.transparent,
+        bottomNavigationBar: _GlassNavBar(
           selectedIndex: page,
-          onDestinationSelected: (value) => setState(() => page = value),
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.shield_outlined),
-              label: 'Home',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.people_outline),
-              label: 'Contacts',
-            ),
-            NavigationDestination(icon: Icon(Icons.history), label: 'Activity'),
-            NavigationDestination(
-              icon: Icon(Icons.settings_outlined),
-              label: 'Settings',
-            ),
-          ],
+          onSelected: (value) => setState(() => page = value),
         ),
       );
     },
   );
 
-  Widget _welcome() => Scaffold(
-    body: Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 440),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Icon(
-                Icons.shield_rounded,
-                size: 100,
-                color: Color(0xFF6552A3),
-              ),
-              const SizedBox(height: 28),
-              const Text(
-                'SafeHer',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 44, fontWeight: FontWeight.w800),
-              ),
-              const Text(
-                'Your Safety, Our Priority.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 18),
-              ),
-              const SizedBox(height: 40),
-              _panel(
-                Icons.people_outline,
-                'Your trusted circle',
-                'Choose who can help. Friendship and emergency access require separate consent.',
-              ),
-              _panel(
-                Icons.location_on_outlined,
-                'Share on your terms',
-                'Location is shared only during an explicitly enabled session. Camera and microphone use must be visible.',
-              ),
-              const SizedBox(height: 24),
-              FilledButton(
-                onPressed: () {
-                  social.setSignedIn(true);
-                  setState(() => onboarded = true);
-                },
-                child: const Padding(
-                  padding: EdgeInsets.all(14),
-                  child: Text('Get started'),
+  Widget _welcome() {
+    final theme = Theme.of(context);
+    // No scroll, fits every display: the content is laid out at a fixed design
+    // width and scaled down uniformly to fit the available height/width. On a
+    // roomy screen it stays at natural size (scaleDown never enlarges); on a
+    // short screen it shrinks to fit instead of scrolling.
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: Space.x6,
+            vertical: Space.x6,
+          ),
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: SizedBox(
+                width: 380,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const EntranceFade(child: Center(child: _BrandMark())),
+                const SizedBox(height: Space.x8),
+                EntranceFade(
+                  index: 1,
+                  child: Text(
+                    'SafeHer',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.displayLarge,
+                  ),
+                ),
+                const SizedBox(height: Space.x2),
+                EntranceFade(
+                  index: 2,
+                  child: Text(
+                    'One button. The people you chose. Nothing shared until you ask.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: Space.x12),
+                _panel(
+                  Icons.people_outline,
+                  'Your trusted circle',
+                  'Choose who can help. Friendship and emergency access are two separate approvals.',
+                  index: 3,
+                ),
+                _panel(
+                  Icons.location_on_outlined,
+                  'Share on your terms',
+                  'Location is shared only during an SOS you started. Camera and microphone use always stays visible.',
+                  index: 4,
+                ),
+                const SizedBox(height: Space.x8),
+                EntranceFade(
+                  index: 5,
+                  child: Pressable(
+                    borderRadius: Radii.brSm,
+                    glow: AppColors.accent,
+                    onTap: () => setState(() => _stage = _AuthStage.login),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: Space.x4 + 2,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: Radii.brSm,
+                        gradient: const LinearGradient(
+                          colors: [AppColors.accent, AppColors.primary],
+                        ),
+                        border: Border.all(color: AppColors.glassHairline),
+                      ),
+                      child: Text(
+                        'Get started',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: Colors.white,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: Space.x6),
+                    EntranceFade(
+                      index: 6,
+                      child: Text(
+                        'Your circle. Your choice. Your safety.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 16),
-              const Text(
-                'Your circle. Your choice. Your safety.',
-                textAlign: TextAlign.center,
-              ),
-            ],
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
   List<Widget> _home() {
     final ownEvent = sosOwner == social.currentUserId;
     final active = ownEvent && emergency.status == EmergencyStatus.active;
     final counting = ownEvent && emergency.status == EmergencyStatus.countdown;
     return [
-      const Text(
-        'A little peace of mind.',
-        style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
-      ),
-      const SizedBox(height: 8),
-      Text(
-        'Your trusted circle. One simple action.',
-        style: TextStyle(
-          fontSize: 16,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      ),
-      const SizedBox(height: 24),
+      _heading('A little peace of mind.', 'Your trusted circle. One action.'),
       _panel(
         Icons.info_outline,
         'Your safety, one touch away',
         'Choose the people you trust. Select approved favorite contacts for your SOS.',
+        index: 1,
       ),
-      const SizedBox(height: 28),
-      Center(
-        child: Semantics(
-          label: 'Start SOS countdown',
-          button: true,
-          child: SizedBox(
-            width: 220,
-            height: 220,
-            child: FilledButton(
-              onPressed: emergency.status == EmergencyStatus.idle
-                  ? _startSos
-                  : null,
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFC73550),
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: const Color(0xFFC73550),
-                disabledForegroundColor: Colors.white,
-                shape: const CircleBorder(),
-                elevation: 10,
-                shadowColor: const Color(0x55C73550),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.sos, size: 64),
-                  Text(
-                    counting
-                        ? '${emergency.remaining}'
-                        : active
-                        ? 'SOS ACTIVE'
-                        : 'START SOS',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-            ),
+      const SizedBox(height: Space.x8),
+      EntranceFade(
+        index: 2,
+        child: Center(
+          child: SosButton(
+            status: ownEvent ? emergency.status : EmergencyStatus.idle,
+            remaining: emergency.remaining,
+            countdownSeconds: emergency.countdownSeconds,
+            enabled:
+                emergency.status == EmergencyStatus.idle ||
+                (ownEvent && emergency.status != EmergencyStatus.idle),
+            // One control, both directions: it starts the SOS, and while one is
+            // running it stops it. That mirrors the hidden volume gesture, so
+            // the button and the gesture never disagree about what they do.
+            onTap: emergency.status == EmergencyStatus.idle
+                ? _startSos
+                : ownEvent
+                ? () => _finishSos(cancelled: true)
+                : () {},
           ),
         ),
       ),
-      const SizedBox(height: 24),
+      const SizedBox(height: Space.x6),
       Text(
         counting
             ? 'SOS starts in ${emergency.remaining} seconds'
@@ -736,53 +804,270 @@ class _SafeHerShellState extends State<SafeHerShell> {
     ),
   ];
 
-  Widget _heading(String title, String subtitle) => Padding(
-    padding: const EdgeInsets.only(bottom: 24),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 8),
-        Text(subtitle),
-      ],
-    ),
-  );
-  Widget _panel(IconData icon, String title, String detail) => Card(
-    margin: const EdgeInsets.only(bottom: 12),
+  Widget _heading(String title, String subtitle) => EntranceFade(
     child: Padding(
-      padding: const EdgeInsets.all(20),
-      child: Row(
+      padding: const EdgeInsets.only(bottom: Space.x6),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  detail,
-                  style: TextStyle(
-                    height: 1.45,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          Text(title, style: Theme.of(context).textTheme.headlineLarge),
+          const SizedBox(height: Space.x2),
+          Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
         ],
       ),
     ),
+  );
+
+  Widget _panel(
+    IconData icon,
+    String title,
+    String detail, {
+    int index = 0,
+    VoidCallback? onTap,
+  }) => EntranceFade(
+    index: index,
+    child: Padding(
+      padding: const EdgeInsets.only(bottom: Space.x3),
+      child: Pressable(
+        onTap: onTap,
+        child: GlassPanel(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // The icon sits in its own tinted chip so it reads as an object
+              // rather than a glyph floating next to text.
+              Container(
+                padding: const EdgeInsets.all(Space.x2),
+                decoration: BoxDecoration(
+                  borderRadius: Radii.brSm,
+                  color: AppColors.primary.withValues(alpha: 0.18),
+                  border: Border.all(color: AppColors.glassHairline),
+                ),
+                child: Icon(icon, color: AppColors.accent, size: 20),
+              ),
+              const SizedBox(width: Space.x4),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: Space.x1),
+                    Text(
+                      detail,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Floating glass navigation.
+///
+/// It sits over the content (`extendBody: true`) so the aurora keeps running
+/// underneath it — which is the whole reason the blur reads as glass here. The
+/// selected destination animates its pill and tint rather than snapping, so
+/// switching tabs feels like one surface moving instead of four separate icons
+/// toggling.
+class _GlassNavBar extends StatelessWidget {
+  const _GlassNavBar({required this.selectedIndex, required this.onSelected});
+
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+
+  static const _items = <({IconData icon, IconData active, String label})>[
+    (
+      icon: Icons.shield_outlined,
+      active: Icons.shield_rounded,
+      label: 'Home',
+    ),
+    (
+      icon: Icons.people_outline,
+      active: Icons.people_rounded,
+      label: 'Contacts',
+    ),
+    (icon: Icons.history, active: Icons.history_rounded, label: 'Activity'),
+    (
+      icon: Icons.settings_outlined,
+      active: Icons.settings_rounded,
+      label: 'Settings',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          Space.x4,
+          0,
+          Space.x4,
+          Space.x4,
+        ),
+        // heightFactor 1.0 is the fix for the nav floating mid-screen: a plain
+        // Center expands to fill the (loose) bottom-bar height and parks the
+        // small glass panel in the middle of it. Wrapping the height to the
+        // child pins the bar to the bottom where it belongs.
+        child: Align(
+          alignment: Alignment.center,
+          heightFactor: 1.0,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: GlassPanel(
+              borderRadius: Radii.brLg,
+              padding: const EdgeInsets.symmetric(
+                horizontal: Space.x2,
+                vertical: Space.x2,
+              ),
+              blur: 26,
+              opacity: 0.70,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  for (var i = 0; i < _items.length; i++)
+                    Expanded(
+                      child: Pressable(
+                        borderRadius: Radii.brMd,
+                        onTap: () => onSelected(i),
+                        semanticLabel: _items[i].label,
+                        hoverLift: 1,
+                        child: AnimatedContainer(
+                          duration: Motion.standard,
+                          curve: Motion.enter,
+                          padding: const EdgeInsets.symmetric(
+                            vertical: Space.x2,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: Radii.brMd,
+                            color: selectedIndex == i
+                                ? AppColors.primary.withValues(alpha: 0.28)
+                                : Colors.transparent,
+                            border: Border.all(
+                              color: selectedIndex == i
+                                  ? AppColors.glassHairline
+                                  : Colors.transparent,
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              AnimatedScale(
+                                scale: selectedIndex == i ? 1.08 : 1.0,
+                                duration: Motion.standard,
+                                curve: Motion.spring,
+                                child: Icon(
+                                  selectedIndex == i
+                                      ? _items[i].active
+                                      : _items[i].icon,
+                                  size: 22,
+                                  color: selectedIndex == i
+                                      ? AppColors.text
+                                      : AppColors.textMuted,
+                                ),
+                              ),
+                              const SizedBox(height: Space.x1),
+                              Text(
+                                _items[i].label,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontSize: 11,
+                                  fontWeight: selectedIndex == i
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                  color: selectedIndex == i
+                                      ? AppColors.text
+                                      : AppColors.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The shield, lit from within.
+///
+/// The existing purple shield is SafeHer's established mark, so it is preserved
+/// rather than redesigned — it just gains a slow halo so the welcome screen has
+/// one living element instead of a flat glyph.
+class _BrandMark extends StatefulWidget {
+  const _BrandMark();
+
+  @override
+  State<_BrandMark> createState() => _BrandMarkState();
+}
+
+class _BrandMarkState extends State<_BrandMark>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 3200),
+  )..repeat(reverse: true);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (reduceMotionOf(context) && _controller.isAnimating) {
+      _controller
+        ..stop()
+        ..value = 0.5;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _controller,
+    builder: (context, _) {
+      final wave = _controller.value;
+      return Container(
+        width: 132,
+        height: 132,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: [
+              AppColors.primary.withValues(alpha: 0.30 + 0.10 * wave),
+              AppColors.primary.withValues(alpha: 0.0),
+            ],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.accent.withValues(alpha: 0.22 + 0.12 * wave),
+              blurRadius: 48,
+              spreadRadius: 4,
+            ),
+          ],
+        ),
+        child: Icon(
+          Icons.shield_rounded,
+          size: 76,
+          color: Color.lerp(AppColors.accent, AppColors.text, 0.25 * wave),
+        ),
+      );
+    },
   );
 }

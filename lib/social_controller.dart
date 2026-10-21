@@ -219,6 +219,23 @@ class SocialController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Sign out and release this device's identity so the next sign-in starts
+  /// clean: the username is cleared (so it can be claimed again), and the
+  /// account is signed out. Without this, logging out and back in would silently
+  /// reuse the previous username instead of showing the login screen.
+  void signOut() {
+    final index = _profiles.indexWhere((p) => p.id == currentUserId);
+    if (index != -1) {
+      _profiles[index] = DemoPerson(
+        id: currentUserId,
+        name: currentUser.name,
+        username: '',
+      );
+    }
+    signedIn = false;
+    notifyListeners();
+  }
+
   void setAppearance(String value) {
     appearance = value;
     notifyListeners();
