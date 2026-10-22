@@ -109,7 +109,7 @@ class CloudBackup {
       'v': 1,
       'salt': base64Encode(salt),
       'wrapped': await _seal(await _wrapKey(code, salt), keyBytes),
-      'data': await _seal(key, utf8.encode(snapshot)),
+      'data': _checkedSize(await _seal(key, utf8.encode(snapshot))),
     });
     return BackupEnabled(code, base64Encode(keyBytes));
   }
@@ -123,7 +123,24 @@ class CloudBackup {
   /// Saves a newer snapshot with the key this device already holds.
   Future<void> save(String uid, String keyB64, String snapshot) async {
     final key = SecretKey(base64Decode(keyB64));
-    await _store.updateData(uid, await _seal(key, utf8.encode(snapshot)));
+    await _store.updateData(
+      uid,
+      _checkedSize(await _seal(key, utf8.encode(snapshot))),
+    );
+  }
+
+  /// The security rules reject an oversized backup, which would otherwise look
+  /// like a permission problem. Fail with something the user can act on.
+  static const _dataLimit = 900000;
+
+  String _checkedSize(String sealed) {
+    if (sealed.length >= _dataLimit) {
+      throw BackupFailure(
+        'This account has too much saved to back up. Clear some voice notes '
+        'or photos from your chats and try again.',
+      );
+    }
+    return sealed;
   }
 
   /// Opens the backup with the recovery code. Throws [BackupFailure] on a

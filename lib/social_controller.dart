@@ -1191,17 +1191,31 @@ class SocialController extends ChangeNotifier {
   /// Recomputed once per save, not once per message.
   Set<String> _audioToKeep() {
     final kept = <String>{};
-    var bytes = 0;
+    // Voice and photos get separate budgets. Sharing one would let a single
+    // large photo evict every voice note, and the two together must stay well
+    // inside the backup document limit once base64 and sealing are applied.
+    var voiceBytes = 0;
+    var photoBytes = 0;
     for (final m in _messages.reversed) {
-      final size = (m.audio?.length ?? 0) + (m.photo?.length ?? 0);
-      if (size == 0 || bytes + size > 450000 || kept.length >= _audioKept) {
+      if (kept.length >= _audioKept) break;
+      final voice = m.audio?.length ?? 0;
+      final photo = m.photo?.length ?? 0;
+      if (voice > 0) {
+        if (voiceBytes + voice > _voiceBudget) continue;
+        voiceBytes += voice;
+      } else if (photo > 0) {
+        if (photoBytes + photo > _photoBudget) continue;
+        photoBytes += photo;
+      } else {
         continue;
       }
       kept.add(m.id);
-      bytes += size;
     }
     return kept;
   }
+
+  static const _voiceBudget = 240000;
+  static const _photoBudget = 160000;
 
   void sendPhoto(String friendId, Uint8List photo) {
     _requireFriend(friendId);

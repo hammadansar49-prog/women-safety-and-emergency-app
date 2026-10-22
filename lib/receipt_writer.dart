@@ -6,6 +6,8 @@ typedef ReceiptWrite =
 /// Coalesces receipt updates while server timestamps are still unresolved.
 /// Successful stamps are remembered until the account session is cleared.
 class ReceiptWriter {
+  static const _maxAttempts = 3;
+
   final Map<String, _ReceiptState> _receipts = {};
 
   void stamp(
@@ -21,7 +23,7 @@ class ReceiptWriter {
       ..read = receipt.read || read
       ..reading = receipt.reading || reading
       ..write = write;
-    if (receipt.pending || receipt.failed) return;
+    if (receipt.pending || receipt.attempts >= _maxAttempts) return;
     if (receipt.delivered && (!receipt.reading || receipt.read)) return;
     receipt.pending = true;
     unawaited(_drain(id, receipt));
@@ -41,9 +43,10 @@ class ReceiptWriter {
         // next iteration sends only that missing field, never delivery again.
       }
     } catch (_) {
-      // Repeated snapshots must not become retries after a quota failure.
-      // A fresh session can try again after clear().
-      receipt.failed = true;
+      // A dropped connection is far more common than a quota failure, so a
+      // later snapshot may retry. Bounded, so repeated snapshots can never
+      // turn a hard rejection into an endless write loop.
+      receipt.attempts++;
     } finally {
       // clear() can replace an entry with another account's pending receipt.
       if (identical(_receipts[id], receipt)) receipt.pending = false;
@@ -63,5 +66,5 @@ class _ReceiptState {
   bool read = false;
   bool reading = false;
   bool pending = false;
-  bool failed = false;
+  int attempts = 0;
 }

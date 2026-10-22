@@ -223,7 +223,13 @@ class RtcSession extends ChangeNotifier {
   }
 
   Future<void> _captureLocal() async {
-    final media = await captureFor(kind);
+    var media = await captureFor(kind);
+    // A blocked or busy camera must not take the whole call down: a video
+    // call that can still be heard is worth far more than no call at all.
+    if (media == null && kind == CallKind.video) {
+      media = await _capture(kind: kind, audio: true, video: false);
+      if (media != null) cameraOn = false;
+    }
     if (_disposed) {
       for (final track in media?.getTracks() ?? <MediaStreamTrack>[]) {
         await track.stop();
@@ -231,7 +237,7 @@ class RtcSession extends ChangeNotifier {
       await media?.dispose();
       throw StateError('Call cancelled');
     }
-    if (media == null) throw StateError('Microphone/camera unavailable');
+    if (media == null) throw StateError('Microphone unavailable');
     local = media;
     // Apply controls tapped while permission/native setup was pending.
     setMic(micOn);

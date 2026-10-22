@@ -100,7 +100,7 @@ void main() {
     expect(writes, [(delivered: true, read: true)]);
   });
 
-  test('a failed receipt does not retry on snapshot feedback', () async {
+  test('a failed receipt retries a bounded number of times', () async {
     final writer = ReceiptWriter();
     var writes = 0;
     Future<void> write({required bool delivered, required bool read}) async {
@@ -124,8 +124,11 @@ void main() {
         reading: true,
         write: write,
       );
+      await Future<void>.delayed(Duration.zero);
     }
-    expect(writes, 1);
+    // A dropped connection may clear, so a later snapshot tries again, but
+    // repeated snapshots can never turn a hard rejection into a write loop.
+    expect(writes, 3);
     writer.clear();
     writer.stamp(
       'message',
@@ -135,7 +138,8 @@ void main() {
       write: write,
     );
     await Future<void>.delayed(Duration.zero);
-    expect(writes, 2);
+    // clear() forgets the attempts too, so a fresh session starts over.
+    expect(writes, 4);
   });
 
   test('old session completion cannot disturb new pending receipts', () async {
