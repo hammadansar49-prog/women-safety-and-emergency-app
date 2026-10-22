@@ -467,6 +467,9 @@ class RtcSession extends ChangeNotifier {
     if (_disposed) return;
     _disposed = true;
     _ringTimeout?.cancel();
+    // Candidates buffered for a flush belong to a connection that is over.
+    _signaling.forget(callId);
+    _localCandidates.clear();
     state = RtcState.ended;
     notifyListeners();
     Future<void> release(Future<void> Function() action) async {

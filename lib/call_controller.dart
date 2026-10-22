@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -155,9 +156,13 @@ class CallController extends ChangeNotifier {
     await stoppingSos;
   }
 
-  String _id() =>
-      '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}'
-      '${(DateTime.now().millisecond * 7919).toRadixString(36)}';
+  /// A call id nobody can guess. The security rules already keep outsiders
+  /// out of a call, but the id travels with the signalling data, so it should
+  /// not be derivable from the clock the way a timestamp is.
+  static final _rand = Random.secure();
+  String _id() => [
+    for (var i = 0; i < 5; i++) _rand.nextInt(1 << 32).toRadixString(36),
+  ].join();
 
   // --- Calls ---------------------------------------------------------------
 

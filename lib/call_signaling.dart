@@ -135,17 +135,69 @@ class CallSignaling {
       'endedAt': DateTime.now().toIso8601String(),
   });
 
-  Future<void> addCandidate(String id, String from, Map<String, dynamic> c) =>
-      _ref(id).collection('candidates').add({'from': from, 'c': jsonEncode(c)});
+  /// Network candidates arrive in a burst of a few dozen as the connection
+  /// is negotiated. One document per side, appended to, rather than one
+  /// document each: the same information for a fraction of the writes, and
+  /// a short buffer before each flush turns most of a burst into one write.
+  final _pending = <String, List<String>>{};
+  final _flushing = <String, Timer>{};
+  final _sent = <String, int>{};
+
+  Future<void> addCandidate(String id, String from, Map<String, dynamic> c) {
+    final key = '$id/$from';
+    (_pending[key] ??= []).add(jsonEncode(c));
+    if (_flushing.containsKey(key)) return Future.value();
+    final done = Completer<void>();
+    _flushing[key] = Timer(const Duration(milliseconds: 250), () async {
+      _flushing.remove(key);
+      try {
+        await _flush(id, from);
+      } catch (_) {
+        // The caller already ignores candidate failures: a connection can
+        // still succeed on the candidates that did arrive.
+      }
+      done.complete();
+    });
+    return done.future;
+  }
+
+  Future<void> _flush(String id, String from) async {
+    final key = '$id/$from';
+    final batch = _pending.remove(key);
+    if (batch == null || batch.isEmpty) return;
+    // A connection rarely needs more than a few dozen; the cap keeps one
+    // call from ever growing a document without bound.
+    final total = (_sent[key] ?? 0) + batch.length;
+    if (total > 120) return;
+    _sent[key] = total;
+    await _ref(id).collection('candidates').doc(from).set({
+      'from': from,
+      'c': FieldValue.arrayUnion(batch),
+    }, SetOptions(merge: true));
+  }
 
   /// New candidates from the other side, as they appear.
-  Stream<Map<String, dynamic>> candidatesFrom(String id, String other) =>
-      _ref(id).collection('candidates').snapshots().expand((s) sync* {
-        for (final change in s.docChanges) {
-          if (change.type != DocumentChangeType.added) continue;
-          final data = change.doc.data();
-          if (data == null || data['from'] != other) continue;
-          yield jsonDecode(data['c'] as String) as Map<String, dynamic>;
-        }
-      });
+  Stream<Map<String, dynamic>> candidatesFrom(String id, String other) {
+    var seen = 0;
+    return _ref(id).collection('candidates').doc(other).snapshots().expand((
+      doc,
+    ) sync* {
+      final list = doc.data()?['c'];
+      if (list is! List) return;
+      for (final raw in list.skip(seen)) {
+        yield jsonDecode(raw as String) as Map<String, dynamic>;
+      }
+      seen = list.length;
+    });
+  }
+
+  /// Drops buffered candidates for a call that has ended.
+  void forget(String id) {
+    for (final key in _flushing.keys.toList()) {
+      if (!key.startsWith('$id/')) continue;
+      _flushing.remove(key)?.cancel();
+    }
+    _pending.removeWhere((key, _) => key.startsWith('$id/'));
+    _sent.removeWhere((key, _) => key.startsWith('$id/'));
+  }
 }

@@ -11,7 +11,11 @@ class _FakeSignaling implements CallSignaling {
   final rings = StreamController<List<CallDoc>>.broadcast();
   final created = <String>[];
   final statuses = <String, CallStatus>{};
+  final forgotten = <String>[];
   int ringSubscriptions = 0;
+
+  @override
+  void forget(String id) => forgotten.add(id);
 
   @override
   Future<void> create({

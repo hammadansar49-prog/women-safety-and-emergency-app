@@ -203,14 +203,23 @@ service cloud.firestore {
       allow delete: if request.auth != null
         && (resource.data.caller == me() || resource.data.callee == me());
 
-      match /candidates/{id} {
+      // One document per side, named after its sender, holding that side's
+      // network candidates. Only that side may write it, and it only ever
+      // grows: a candidate already sent can never be altered or withdrawn.
+      match /candidates/{sender} {
         allow get, list: if request.auth != null && inCall(call);
         allow create: if request.auth != null && inCall(call)
+          && sender == me()
           && request.resource.data.keys().hasOnly(['from', 'c'])
           && request.resource.data.from == me()
-          && request.resource.data.c is string
-          && request.resource.data.c.size() < 2000;
-        allow update: if false;
+          && request.resource.data.c is list
+          && request.resource.data.c.size() <= 120;
+        allow update: if request.auth != null && inCall(call)
+          && sender == me()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c'])
+          && request.resource.data.c is list
+          && request.resource.data.c.size() <= 120
+          && request.resource.data.c.size() >= resource.data.c.size();
         allow delete: if request.auth != null && inCall(call);
       }
     }
