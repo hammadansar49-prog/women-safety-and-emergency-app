@@ -257,7 +257,9 @@ class _PinLockScreenState extends State<PinLockScreen> {
       body: Column(
         children: [
           BlushHeader(
-            height: 250,
+            // Tall enough for the wordmark, the lock badge and both lines of
+            // greeting once the status bar inset is taken off the top.
+            height: 296,
             child: Column(
               children: [
                 const Wordmark(),
@@ -278,6 +280,10 @@ class _PinLockScreenState extends State<PinLockScreen> {
                 Text(
                   'Welcome back, $name',
                   textAlign: TextAlign.center,
+                  // A long name must shorten rather than push the PIN keypad
+                  // out of the header.
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 4),

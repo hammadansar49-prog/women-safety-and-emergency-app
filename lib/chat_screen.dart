@@ -5,8 +5,10 @@ import 'package:audioplayers/audioplayers.dart';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'chat_photo.dart';
+import 'location_service.dart';
 import 'call_controller.dart';
 import 'call_signaling.dart';
 import 'incoming_sos_screen.dart';
@@ -14,6 +16,7 @@ import 'social_controller.dart';
 import 'theme/tokens.dart';
 import 'ui/chat_composer.dart';
 import 'ui/chat_presence.dart';
+import 'ui/sos_map_card.dart';
 import 'ui/design.dart';
 import 'ui/motion.dart';
 
@@ -25,6 +28,7 @@ class ChatScreen extends StatefulWidget {
     this.calls,
     this.safetyBannerBuilder,
     this.photoPicker,
+    this.locator,
   });
 
   final SocialController social;
@@ -35,6 +39,9 @@ class ChatScreen extends StatefulWidget {
   final WidgetBuilder? safetyBannerBuilder;
   final Future<Uint8List?> Function(ImageSource source)? photoPicker;
 
+  /// Injected in tests, where there is no device to ask for a position.
+  final Future<LocationFix?> Function()? locator;
+
   @override
   State<ChatScreen> createState() => _ChatScreenState();
 }
@@ -43,6 +50,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final _composer = TextEditingController();
   final _scroll = ScrollController();
   bool _pickingPhoto = false;
+  bool _sharingPlace = false;
   late final String _ownerId = widget.social.currentUserId;
   late final String? _ownerAccount = widget.social.accountKey;
   late final String _ownerUsername = widget.social.currentUser.username;
@@ -204,12 +212,6 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  void _notYet(String what) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text('$what is not ready yet.')));
-  }
-
   Future<void> _choosePhoto(ImageSource source) async {
     if (!_available || _pickingPhoto) return;
     widget.social.onTyping?.call(false);
@@ -236,7 +238,32 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _takePhoto() => _choosePhoto(ImageSource.camera);
   void _pickPhoto() => _choosePhoto(ImageSource.gallery);
-  void _shareLocation() => _notYet('Sharing your location in chat');
+  Future<void> _shareLocation() async {
+    if (!_available || _sharingPlace) return;
+    widget.social.onTyping?.call(false);
+    setState(() => _sharingPlace = true);
+    try {
+      final fix = await (widget.locator ?? LocationTracker.currentFix)();
+      if (!mounted || !_available) return;
+      if (fix == null) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Could not find where you are. Turn location on and allow '
+                'SafeHer to use it.',
+              ),
+            ),
+          );
+        return;
+      }
+      widget.social.sendLocation(widget.friendId, fix.latitude, fix.longitude);
+      _scrollToEnd();
+    } finally {
+      if (mounted) setState(() => _sharingPlace = false);
+    }
+  }
 
   void _call(bool video) {
     if (!_available) return;
@@ -491,6 +518,16 @@ class _ChatScreenState extends State<ChatScreen> {
                                         ),
                                       if (message.isVoice)
                                         _VoiceBubble(
+                                          message: message,
+                                          mine: message.senderId == _ownerId,
+                                          status: message.senderId == _ownerId
+                                              ? widget.social.statusOf(
+                                                  message.id,
+                                                )
+                                              : null,
+                                        )
+                                      else if (message.isPlace)
+                                        _PlaceBubble(
                                           message: message,
                                           mine: message.senderId == _ownerId,
                                           status: message.senderId == _ownerId
@@ -1376,6 +1413,97 @@ class _CallScreenState extends State<_CallScreen>
             ),
             const SizedBox(height: 40),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A place someone shared, as a tappable card that opens the maps app.
+class _PlaceBubble extends StatelessWidget {
+  const _PlaceBubble({
+    required this.message,
+    required this.mine,
+    this.status,
+  });
+
+  final ChatMessage message;
+  final bool mine;
+  final MessageStatus? status;
+
+  @override
+  Widget build(BuildContext context) {
+    final place = message.place!;
+    final coords =
+        '${place.lat.toStringAsFixed(5)}, ${place.lng.toStringAsFixed(5)}';
+    return Align(
+      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 260),
+          child: Material(
+            color: mine ? AppColors.tint : AppColors.surface,
+            borderRadius: BorderRadius.circular(20),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () => launchUrl(
+                Uri.parse(
+                  'https://www.google.com/maps/search/?api=1'
+                  '&query=${place.lat},${place.lng}',
+                ),
+                mode: LaunchMode.externalApplication,
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.border),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const MapSketch(height: 96),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.place_rounded,
+                            size: 18,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  mine ? 'You shared your location' : 'Shared a location',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                Text(
+                                  coords,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (status != null) _Ticks(status: status!),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );

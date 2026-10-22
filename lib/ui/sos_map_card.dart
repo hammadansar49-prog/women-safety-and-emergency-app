@@ -98,6 +98,19 @@ class SosMapCard extends StatelessWidget {
   }
 }
 
+/// The locked map look on its own, for anywhere a place needs a thumbnail.
+class MapSketch extends StatelessWidget {
+  const MapSketch({super.key, this.height = 120});
+  final double height;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: height,
+    width: double.infinity,
+    child: CustomPaint(painter: _MapPainter()),
+  );
+}
+
 /// Two broad roads, the walked path as a dotted line, and the pin — the shapes
 /// from the locked design, scaled to whatever width the card gets.
 class _MapPainter extends CustomPainter {

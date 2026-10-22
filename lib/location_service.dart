@@ -49,6 +49,40 @@ class LocationTracker {
     }
   }
 
+  /// One fix, for sharing where you are right now in a chat. Unlike [start]
+  /// this subscribes to nothing and leaves no foreground service behind.
+  /// Returns null when location is off or permission was declined.
+  static Future<LocationFix?> currentFix() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return null;
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return null;
+      }
+      final p = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 20),
+        ),
+      );
+      return LocationFix(p.latitude, p.longitude, p.timestamp);
+    } catch (_) {
+      // A timeout still leaves a usable recent fix on most phones.
+      try {
+        final last = await Geolocator.getLastKnownPosition();
+        return last == null
+            ? null
+            : LocationFix(last.latitude, last.longitude, last.timestamp);
+      } catch (_) {
+        return null;
+      }
+    }
+  }
+
   /// Stops tracking and returns the last known position, so the point where
   /// the SOS ended can be recorded.
   Future<LocationFix?> stop() async {

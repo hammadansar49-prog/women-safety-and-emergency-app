@@ -110,6 +110,31 @@ class ChatMessage {
   bool get isCall =>
       kind == MessageKind.missedVoiceCall ||
       kind == MessageKind.missedVideoCall;
+
+  /// A shared place, if this message carries one. Derived from the text rather
+  /// than stored, so it survives the backup, the cloud and an older build
+  /// (which simply shows the coordinates) without a new message shape.
+  ({double lat, double lng})? get place => SharedPlace.parse(text);
+  bool get isPlace => place != null;
+}
+
+/// How "my location" travels inside an ordinary sealed text message.
+abstract final class SharedPlace {
+  static const _prefix = 'safeher:place ';
+
+  static String encode(double lat, double lng) =>
+      '$_prefix${lat.toStringAsFixed(6)},${lng.toStringAsFixed(6)}';
+
+  static ({double lat, double lng})? parse(String text) {
+    if (!text.startsWith(_prefix)) return null;
+    final parts = text.substring(_prefix.length).trim().split(',');
+    if (parts.length != 2) return null;
+    final lat = double.tryParse(parts[0]);
+    final lng = double.tryParse(parts[1]);
+    if (lat == null || lng == null) return null;
+    if (lat.abs() > 90 || lng.abs() > 180) return null;
+    return (lat: lat, lng: lng);
+  }
 }
 
 enum LocalSosStatus { active, cancelled, resolved }
@@ -1089,6 +1114,11 @@ class SocialController extends ChangeNotifier {
     _emit(CloudOp('message', friendId, id: id, text: cleaned));
     notifyListeners();
   }
+
+  /// Shares where you are right now. It travels as an ordinary sealed text
+  /// message, so the server still only ever holds ciphertext.
+  void sendLocation(String friendId, double lat, double lng) =>
+      sendMessage(friendId, SharedPlace.encode(lat, lng));
 
   // --- Who is around --------------------------------------------------------
 
