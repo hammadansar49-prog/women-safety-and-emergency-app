@@ -55,6 +55,17 @@ Future<void> main() async {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       ).timeout(const Duration(seconds: 30));
+    } on FirebaseException catch (error) {
+      // Android starts Firebase from google-services.json before this runs,
+      // so asking for it again is refused rather than failed. There is a
+      // working app either way, and locking someone out of the SOS button
+      // over which call created it would be the wrong answer here.
+      if (error.code != 'duplicate-app') {
+        debugPrint('SafeHer Firebase startup failed: $error');
+        runApp(CloudConnectionError(onRetry: main));
+        return;
+      }
+      debugPrint('SafeHer continuing with the already initialised Firebase.');
     } catch (error, stack) {
       debugPrint('SafeHer Firebase startup failed: $error');
       debugPrintStack(stackTrace: stack);
