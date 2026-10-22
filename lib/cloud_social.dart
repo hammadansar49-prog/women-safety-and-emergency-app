@@ -96,6 +96,14 @@ class CloudSocial {
         onError?.call(
           'Could not reach SafeHer. Chat will connect when you are online.',
         );
+        // The write is still queued, so it lands by itself once the network
+        // or the backend recovers. Without this the warning would stay up for
+        // the rest of the session even though chat had started working again.
+        unawaited(
+          _publishIdentity(me, uid, generation).then((_) {
+            if (_isCurrent(me, generation)) onError?.call(null);
+          }).catchError((Object _) {}),
+        );
       }
     }
     if (!_isCurrent(me, generation)) return;
