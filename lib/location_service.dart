@@ -104,8 +104,10 @@ class LocationTracker {
     if (defaultTargetPlatform == TargetPlatform.android) {
       return AndroidSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 5,
-        intervalDuration: const Duration(seconds: 3),
+        // The sender only publishes fixes that say something new, so a
+        // tighter stream than this would cost battery for nothing.
+        distanceFilter: 10,
+        intervalDuration: const Duration(seconds: 5),
         foregroundNotificationConfig: const ForegroundNotificationConfig(
           notificationTitle: 'SafeHer SOS is sharing your location',
           notificationText: 'Your SOS buddies can see where you are.',
@@ -115,7 +117,7 @@ class LocationTracker {
     }
     return const LocationSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: 5,
+      distanceFilter: 10,
     );
   }
 }

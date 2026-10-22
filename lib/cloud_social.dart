@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -64,7 +65,7 @@ class CloudSocial {
   /// SOS events this device sent: id -> recipients. Kept briefly after the
   /// SOS ends so the final "ended here" fix still reaches them.
   final _sosOut = <String, List<String>>{};
-  final _sosLastLoc = <String, DateTime>{};
+  final _sosLastLoc = <String, ({DateTime at, double lat, double lng})>{};
 
   bool get running => _me != null;
 
@@ -768,24 +769,24 @@ class CloudSocial {
     final to = _sosOut[event];
     if (to == null) return;
     final parts = op.text!.split(',');
+    final lat = double.parse(parts[0]);
+    final lng = double.parse(parts[1]);
     final last = _sosLastLoc[event];
     final now = DateTime.now();
-    // The live stream is thinned; the final fix after the end always goes.
-    if (last != null &&
-        now.difference(last).inSeconds < 3 &&
-        !_ended.contains(event)) {
+    if (last != null && !_ended.contains(event) && !sosFixIsWorthSending(last, now, lat, lng)) {
       return;
     }
-    _sosLastLoc[event] = now;
+    _sosLastLoc[event] = (at: now, lat: lat, lng: lng);
     await Future.wait([
       for (final r in to)
         _alert(event, r).update({
-          'lat': double.parse(parts[0]),
-          'lng': double.parse(parts[1]),
+          'lat': lat,
+          'lng': lng,
           'locAt': parts[2],
         }),
     ]);
   }
+
 
   final _ended = <String>{};
 
@@ -886,4 +887,32 @@ class CloudSocial {
           'createdAt': FieldValue.serverTimestamp(),
         });
   }
+}
+
+/// Which fixes from an SOS's live stream are worth a write.
+///
+/// Every published fix costs one write per SOS buddy, so an SOS left running
+/// is by far the most expensive thing this app does. Movement comes first:
+/// someone being driven away is updated as often as the floor allows, while
+/// someone sitting still is still reported regularly, because "she has not
+/// moved" is itself something a buddy needs to go on seeing.
+bool sosFixIsWorthSending(
+  ({DateTime at, double lat, double lng}) last,
+  DateTime now,
+  double lat,
+  double lng,
+) {
+  final since = now.difference(last.at);
+  if (since < const Duration(seconds: 8)) return false;
+  if (since >= const Duration(seconds: 20)) return true;
+  return metresBetween(last.lat, last.lng, lat, lng) >= 20;
+}
+
+/// Flat-earth distance. Over the few tens of metres this decides on it is
+/// accurate to well under a metre, and needs no trigonometry per fix.
+double metresBetween(double lat1, double lng1, double lat2, double lng2) {
+  const perDegree = 111320.0;
+  final dLat = (lat2 - lat1) * perDegree;
+  final dLng = (lng2 - lng1) * perDegree * math.cos(lat1 * math.pi / 180);
+  return math.sqrt(dLat * dLat + dLng * dLng);
 }
