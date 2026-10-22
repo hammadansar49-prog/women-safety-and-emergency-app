@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app's own blush header colour, so the launch screen is already
+         SafeHer before a single Flutter widget has been built. -->
+    <color name="launch_background">#FADCE4</color>
+</resources>

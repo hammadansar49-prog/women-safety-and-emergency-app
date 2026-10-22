@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app's berry, the loudest colour the palette has, so the icon can
+         hold its own against everything else on a home screen. -->
+    <color name="ic_launcher_background">#C2255C</color>
+</resources>

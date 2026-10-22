@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'theme/tokens.dart';
+import 'ui/brand_mark.dart';
 import 'ui/design.dart';
 import 'ui/motion.dart';
 import 'username_check.dart';
@@ -94,8 +95,19 @@ Widget _centerHeader(BuildContext context, String title, String subtitle) {
   final theme = Theme.of(context);
   return Column(
     children: [
-      const Wordmark(),
-      const SizedBox(height: 26),
+      // The one place the mark appears in the app itself: the first screen a
+      // new person sees, where the name alone has nothing to stand beside.
+      // Set beside the name rather than above it, because this screen has no
+      // vertical room to spare on a short phone.
+      Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          BrandMark(size: 34, faceColor: AppColors.header),
+          const SizedBox(width: 10),
+          const Wordmark(),
+        ],
+      ),
+      const SizedBox(height: 24),
       Text(
         title,
         textAlign: TextAlign.center,
