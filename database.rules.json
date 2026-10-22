@@ -1,0 +1,30 @@
+{
+  // Presence only. Chat, calls, SOS and everything private stay in Firestore;
+  // this database exists so the chattiest, least important signal cannot eat
+  // the quota that those depend on.
+  "rules": {
+    // Nothing is readable or writable unless a rule below says so.
+    ".read": false,
+    ".write": false,
+
+    "presence": {
+      // Keyed by account uid, because a Realtime Database rule cannot look up
+      // the username that owns a record. Only the account itself writes its
+      // own, and only a signed-in account can read one. Nothing private lives
+      // here: no message text and no location, only online, last seen, and
+      // which conversation is open.
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $uid",
+        ".validate": "newData.hasChildren(['online', 'at'])",
+        "online": { ".validate": "newData.isBoolean()" },
+        "at": { ".validate": "newData.isNumber()" },
+        "typing": { ".validate": "newData.isBoolean()" },
+        "openWith": {
+          ".validate": "newData.isString() && newData.val().length <= 20"
+        },
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}

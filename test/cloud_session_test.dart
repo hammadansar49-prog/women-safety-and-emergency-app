@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:safeher/cloud_social.dart';
 import 'package:safeher/social_controller.dart';
 
+import 'fake_presence.dart';
+
 class _Db extends Fake implements FirebaseFirestore {
   final publishing = Completer<void>();
   final started = Completer<void>();
@@ -99,6 +101,7 @@ void main() {
       final cloud = CloudSocial(
         social,
         db: db,
+        presence: FakePresence(),
         onError: (message) {
           if (message != null) errors.add(message);
         },
@@ -130,7 +133,7 @@ void main() {
       social.enterAccount('zz_eve_1', null, name: 'EVE', username: 'zz_eve_1');
       social.setIdentity('private', 'public');
       final db = _Db();
-      final cloud = CloudSocial(social, db: db);
+      final cloud = CloudSocial(social, db: db, presence: FakePresence());
       final starting = cloud.start('zz_eve_1', 'eve-uid');
       await db.started.future;
       await cloud.stop();

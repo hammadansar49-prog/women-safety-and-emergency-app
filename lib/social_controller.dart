@@ -1169,23 +1169,22 @@ class SocialController extends ChangeNotifier {
     super.notifyListeners();
   }
 
-  /// Server disconnects have no callback in Firestore. Expire stale hints
-  /// locally too, even when the last presence snapshot never changes again.
-  void expirePresence(DateTime now) {
+  /// "online" needs no expiry: the presence store writes the offline record
+  /// itself when a device's connection drops. Typing still does, because a
+  /// phone killed mid-message never gets to say it stopped, and a stuck
+  /// "typing…" is the one presence hint people actually notice.
+  void expireTyping(DateTime now) {
     var changed = false;
     for (final entry in _presence.entries.toList()) {
       final p = entry.value;
       final at = p.lastSeen;
-      if (at == null) continue;
-      final age = now.difference(at);
-      final online = p.online && age < const Duration(seconds: 70);
-      final typing = p.typing && online && age < const Duration(seconds: 5);
-      if (online == p.online && typing == p.typing) continue;
+      if (!p.typing || at == null) continue;
+      if (now.difference(at) < const Duration(seconds: 5)) continue;
       _presence[entry.key] = Presence(
-        online: online,
-        typing: typing,
+        online: p.online,
+        typing: false,
         lastSeen: at,
-        openWith: online ? p.openWith : null,
+        openWith: p.openWith,
       );
       changed = true;
     }

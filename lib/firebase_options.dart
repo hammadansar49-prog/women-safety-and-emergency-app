@@ -33,6 +33,7 @@ class DefaultFirebaseOptions {
     appId: '1:794636415951:android:921c06f0389ec4d92698ba',
     messagingSenderId: '794636415951',
     projectId: 'safeher-cfb5a',
+    databaseURL: 'https://safeher-cfb5a-default-rtdb.firebaseio.com',
     storageBucket: 'safeher-cfb5a.firebasestorage.app',
   );
 
@@ -42,6 +43,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '794636415951',
     projectId: 'safeher-cfb5a',
     authDomain: 'safeher-cfb5a.firebaseapp.com',
+    databaseURL: 'https://safeher-cfb5a-default-rtdb.firebaseio.com',
     storageBucket: 'safeher-cfb5a.firebasestorage.app',
   );
 }

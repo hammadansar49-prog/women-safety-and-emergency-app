@@ -57,6 +57,7 @@ dependencies:
   url_launcher: ^6.3.3
   record: ^6.2.1
   path_provider: ^2.1.6
+  firebase_database: ^13.0.0
 
 dev_dependencies:
   flutter_test:

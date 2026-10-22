@@ -9,6 +9,8 @@ import 'package:safeher/cloud_social.dart';
 import 'package:safeher/e2ee.dart';
 import 'package:safeher/social_controller.dart';
 
+import 'fake_presence.dart';
+
 class LiveDb extends Fake implements FirebaseFirestore {
   final publish = Completer<void>();
   final profile = Completer<DocumentSnapshot<Map<String, dynamic>>>();
@@ -172,13 +174,15 @@ void main() {
   late SocialController social;
   late LiveDb db;
   late CloudSocial cloud;
+  late FakePresence presence;
   setUp(() {
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     social = SocialController(newAccount: true)
       ..enterAccount('alice', null, name: 'Alice', username: 'alice');
     social.setIdentity('private', 'public');
     db = LiveDb();
-    cloud = CloudSocial(social, db: db);
+    presence = FakePresence();
+    cloud = CloudSocial(social, db: db, presence: presence);
   });
   tearDown(() async {
     if (!db.publish.isCompleted) db.publish.complete();
@@ -201,14 +205,14 @@ void main() {
       await cloud.start('alice', 'alice-uid');
       final requests = db.streams['friendReqs/to']!;
       expect(requests.hasListener, isTrue);
-      db.offlinePresence = Completer<void>();
+      presence.holdOffline = Completer<void>();
       social.enterAccount('bob', null, username: 'bob', name: 'Bob');
       social.setIdentity('private', 'public');
       final restarting = cloud.start('bob', 'bob-uid');
       expect(requests.hasListener, isFalse);
       await Future<void>.delayed(const Duration(milliseconds: 2100));
       expect(requests.hasListener, isTrue);
-      db.offlinePresence!.complete();
+      presence.holdOffline!.complete();
       await restarting;
     },
   );
@@ -338,7 +342,7 @@ void main() {
     },
   );
   test(
-    'background heartbeat cannot republish online and resume retains open chat',
+    'backgrounding publishes nothing further and resume retains open chat',
     () {
       fakeAsync((clock) {
         db.publish.complete();
@@ -347,12 +351,14 @@ void main() {
         cloud.setOpenChat('bob');
         cloud.goAway();
         clock.flushMicrotasks();
-        final writes = db.presence.length;
-        clock.elapse(const Duration(seconds: 26));
-        expect(db.presence.length, writes);
+        final writes = presence.published.length;
+        // There is no heartbeat to republish "online" from the background:
+        // the store marks a dropped device offline by itself.
+        clock.elapse(const Duration(seconds: 120));
+        expect(presence.published.length, writes);
         cloud.resume();
-        expect(db.presence.last['online'], true);
-        expect(db.presence.last['openWith'], 'bob');
+        expect(presence.published.last.online, isTrue);
+        expect(presence.published.last.openWith, 'bob');
         cloud.stop();
         clock.flushMicrotasks();
       });

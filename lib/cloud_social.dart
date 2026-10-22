@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'e2ee.dart';
+import 'presence_channel.dart';
 import 'push_service.dart';
 import 'receipt_writer.dart';
 import 'social_controller.dart';
@@ -21,12 +22,18 @@ class CloudSocial {
   CloudSocial(
     this.social, {
     FirebaseFirestore? db,
+    PresenceChannel? presence,
     this.e2ee = const E2ee(),
     this.onError,
-  }) : _db = db ?? FirebaseFirestore.instance;
+  }) : _db = db ?? FirebaseFirestore.instance,
+       _presence = presence ?? RtdbPresence();
 
   final SocialController social;
   final FirebaseFirestore _db;
+
+  /// Presence lives in its own store, away from chat and SOS. See
+  /// [PresenceChannel] for why.
+  final PresenceChannel _presence;
   final E2ee e2ee;
   late final PushService _push = PushService(_db);
 
@@ -45,7 +52,7 @@ class CloudSocial {
   final _profileSubs = <String, void Function()>{};
   final _chatSnapshots = <String, QuerySnapshot<Map<String, dynamic>>>{};
   int _graphGen = 0;
-  final _peers = <String, ({String name, String pub})>{};
+  final _peers = <String, ({String name, String pub, String uid})>{};
 
   /// Profile fetches already running, so a second caller waits for the same
   /// answer instead of being told the key is missing.
@@ -83,7 +90,7 @@ class CloudSocial {
     social.onChatOpen = setOpenChat;
     social.onTyping = setTyping;
     _listen();
-    _startPresence();
+    unawaited(_startPresence(uid));
     _push.register(me).catchError((Object _) {});
     try {
       await _publishIdentity(
@@ -114,26 +121,27 @@ class CloudSocial {
   /// The conversation this account has open, so the other side can show the
   /// dot that says "they are reading this".
   String? _openWith;
-  Timer? _beat;
   Timer? _presenceExpiry;
   Timer? _typingTimer;
   bool _foreground = true;
   bool _typing = false;
   DateTime? _typingPublished;
-  final _presenceSubs = <String, void Function()>{};
+  /// Friend username -> the uid whose presence is being watched.
+  final _presenceSubs = <String, String>{};
 
-  void _startPresence() {
+  Future<void> _startPresence(String uid) async {
     _foreground = true;
-    _beat?.cancel();
-    _writePresence(online: true);
-    // A heartbeat, so a phone that dies does not look online for ever.
-    _beat = Timer.periodic(const Duration(seconds: 25), (_) {
-      if (_foreground) _writePresence(online: true);
-    });
+    // No heartbeat: the presence store marks this device offline by itself
+    // if the connection drops, which is both cheaper and more truthful than
+    // repeating "still here" every few seconds.
+    await _presence.start(uid);
+    await _writePresence(online: true);
     _presenceExpiry?.cancel();
+    // Typing still goes stale on its own, so a half-finished message does
+    // not leave "typing…" on the other screen for ever.
     _presenceExpiry = Timer.periodic(
       const Duration(seconds: 1),
-      (_) => social.expirePresence(DateTime.now()),
+      (_) => social.expireTyping(DateTime.now()),
     );
   }
 
@@ -183,48 +191,40 @@ class CloudSocial {
     return _writePresence(online: false);
   }
 
-  Future<void> _writePresence({required bool online}) async {
-    final me = _me;
-    if (me == null) return;
-    try {
-      await _db.collection('presence').doc(me).set({
-        'online': online,
-        'at': FieldValue.serverTimestamp(),
-        'typing': online && _typing,
-        if (online && _openWith != null) 'openWith': _openWith,
-      });
-    } catch (_) {
-      // Presence is a nicety; never let it surface as an error.
-    }
+  Future<void> _writePresence({required bool online}) {
+    if (_me == null) return Future.value();
+    return _presence.publish(
+      online: online,
+      openWith: online ? _openWith : null,
+      typing: online && _typing,
+    );
   }
 
   /// One listener per buddy. A heartbeat older than a minute means the app is
   /// gone, whatever the flag says.
   void _watchPresence(Set<String> friends) {
     for (final gone in _presenceSubs.keys.toSet().difference(friends)) {
-      _presenceSubs.remove(gone)?.call();
+      final uid = _presenceSubs.remove(gone);
+      if (uid != null) _presence.unwatch(uid);
     }
     for (final f in friends) {
       if (_presenceSubs.containsKey(f)) continue;
-      _presenceSubs[f] = _listenRetrying(
-        () => _db.collection('presence').doc(f).snapshots(),
-        (DocumentSnapshot<Map<String, dynamic>> doc) {
-          final data = doc.data();
-          final at = (data?['at'] as Timestamp?)?.toDate();
-          final fresh =
-              at != null &&
-              DateTime.now().difference(at) < const Duration(seconds: 70);
-          social.applyPresence(
-            f,
-            Presence(
-              online: (data?['online'] as bool? ?? false) && fresh,
-              lastSeen: at,
-              openWith: data?['openWith'] as String?,
-              typing: fresh && (data?['typing'] as bool? ?? false),
-            ),
-          );
-        },
-      );
+      // Presence is addressed by uid, so a friend whose profile has not been
+      // read yet is simply not watched; _applyGraph runs again once it is.
+      final uid = _peers[f]?.uid ?? '';
+      if (uid.isEmpty) continue;
+      _presenceSubs[f] = uid;
+      _presence.watch(uid, (state) {
+        social.applyPresence(
+          f,
+          Presence(
+            online: state.online,
+            lastSeen: state.lastSeen,
+            openWith: state.openWith,
+            typing: state.typing,
+          ),
+        );
+      });
     }
   }
 
@@ -243,14 +243,12 @@ class CloudSocial {
     social.onTyping = null;
     _typingTimer?.cancel();
     _typing = false;
-    _beat?.cancel();
-    _beat = null;
     _presenceExpiry?.cancel();
     _presenceExpiry = null;
-    for (final cancel in _presenceSubs.values) {
-      cancel();
-    }
     _presenceSubs.clear();
+    // Started, not awaited: closing the presence socket is a network round
+    // trip, and nothing below it may wait on the network.
+    final presenceStopped = _presence.stop();
     _openWith = null;
     for (final cancel in _subs) {
       cancel();
@@ -274,6 +272,7 @@ class CloudSocial {
     // already completed above; do not hold the next account behind cleanup.
     await Future.wait<void>([
       away,
+      presenceStopped,
       _push.unregister(),
     ]).timeout(const Duration(seconds: 2), onTimeout: () => <void>[]);
   }
@@ -458,6 +457,7 @@ class CloudSocial {
           _peers[username] = (
             name: (data['name'] as String?) ?? username,
             pub: (data['pub'] as String?) ?? '',
+            uid: (data['uid'] as String?) ?? '',
           );
         }
       } catch (_) {
@@ -482,7 +482,11 @@ class CloudSocial {
           _peers[f] = (
             name: (data['name'] as String?) ?? f,
             pub: (data['pub'] as String?) ?? '',
+            uid: (data['uid'] as String?) ?? '',
           );
+          // A profile read for the first time is what makes this friend's
+          // presence addressable, so pick it up now rather than next change.
+          _watchPresence(_presenceSubs.keys.toSet().union({f}));
           final cached = _chatSnapshots[f];
           if (_peers[f]!.pub.isNotEmpty &&
               oldPub != _peers[f]!.pub &&

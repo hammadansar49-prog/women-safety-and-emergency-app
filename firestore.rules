@@ -215,21 +215,12 @@ service cloud.firestore {
       }
     }
 
+    // Presence has moved to the Realtime Database, where the server itself
+    // records a device going offline. Nothing may write it here any more, so
+    // an older build cannot keep spending this database's quota on it.
+
     // Push token of the phone that should be woken for this account's alerts.
     // Only the owner writes it; only the server function reads it.
-    // Who is online, when they were last seen, and which conversation they
-    // have open. Only an accepted buddy may read it, and only the person
-    // themselves may write it. "openWith" is a username, never message text.
-    match /presence/{name} {
-      allow create, update: if request.auth != null && name == me()
-        && request.resource.data.keys().hasOnly(['online', 'at', 'openWith', 'typing'])
-        && request.resource.data.online is bool
-        && request.resource.data.get('typing', false) is bool;
-      allow get: if request.auth != null
-        && (name == me() || friendsOf(pairId(me(), name)));
-      allow list, delete: if false;
-    }
-
     match /pushTokens/{name} {
       allow create, update: if request.auth != null && name == me()
         && request.resource.data.keys().hasOnly(['token', 'platform', 'updatedAt'])
