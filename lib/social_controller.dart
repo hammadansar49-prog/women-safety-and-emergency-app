@@ -338,6 +338,9 @@ class SocialController extends ChangeNotifier {
   /// Forgets everything held in memory, back to a blank, signed-out device.
   /// Appearance is a device preference and survives.
   void _wipe() {
+    onCloudOp = null;
+    onChatOpen = null;
+    syncError = null;
     _profiles
       ..clear()
       ..add(const DemoPerson(id: 'hammad', name: 'Hammad', username: ''));
@@ -378,6 +381,15 @@ class SocialController extends ChangeNotifier {
     required String name,
     String username = '',
   }) {
+    if (snapshot != null) {
+      final saved = SocialController.fromSnapshot(snapshot);
+      final expected = username.isEmpty ? key : username;
+      final matches = saved.currentUser.username == expected;
+      saved.dispose();
+      if (!matches) {
+        throw const FormatException('Saved data belongs to another account.');
+      }
+    }
     accountKey = null;
     _wipe();
     if (snapshot != null) {
@@ -782,6 +794,9 @@ class SocialController extends ChangeNotifier {
     required List<({String from, String to, String status})> links,
     required Map<String, String> names,
   }) {
+    // A cancelled listener may finish its profile lookup after account switch.
+    // Never map the old account's username onto the new account's local id.
+    if (mine != currentUser.username) return;
     String id(String u) => u == mine ? currentUserId : u;
     void know(String u) {
       if (u == mine || _profiles.any((p) => p.id == u)) return;

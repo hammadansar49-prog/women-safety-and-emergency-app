@@ -11,7 +11,7 @@ Future<SocialController> openSettings(WidgetTester tester) async {
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final social = SocialController();
   addTearDown(social.dispose);
-  await tester.pumpWidget(SafeHerApp(social: social));
+  await tester.pumpWidget(SafeHerApp(social: social, localPreview: true));
   await settle(tester);
   await signUp(tester, username: 'hammadq');
   await tester.tap(find.text('Settings').last);

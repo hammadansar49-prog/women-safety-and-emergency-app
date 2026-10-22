@@ -14,13 +14,13 @@ if (-not (Get-Command flutter -ErrorAction SilentlyContinue)) {
 Write-Host "SafeHer browser preview: http://localhost:$Port"
 if ($Development) {
     Write-Host 'Development mode: keep this terminal open. r reloads, R restarts, q stops.'
-    & flutter run -d web-server --web-hostname 127.0.0.1 --web-port $Port
+    & flutter run -d web-server --web-hostname 127.0.0.1 --web-port $Port --dart-define=SAFEHER_LOCAL=false
     exit $LASTEXITCODE
 }
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     throw 'Python is required to serve this preview. Alternatively use -Development for the Flutter development server.'
 }
-& flutter build web --no-wasm-dry-run
+& flutter build web --no-wasm-dry-run --dart-define=SAFEHER_LOCAL=false
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host 'Keep this terminal open. Ctrl+C stops the preview. Rerun the launcher after code changes.'
 & python -m http.server $Port --bind 127.0.0.1 --directory (Join-Path $projectRoot 'build\web')

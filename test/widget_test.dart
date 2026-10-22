@@ -38,7 +38,7 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(420, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(const SafeHerApp());
+    await tester.pumpWidget(const SafeHerApp(localPreview: true));
     await settle(tester);
     expect(find.text('Sign in'), findsWidgets);
     expect(find.text('Create account'), findsWidgets);
@@ -52,7 +52,7 @@ void main() {
     final social = SocialController();
     addTearDown(social.dispose);
 
-    await tester.pumpWidget(SafeHerApp(social: social));
+    await tester.pumpWidget(SafeHerApp(social: social, localPreview: true));
     await settle(tester);
     await signUp(tester, username: 'hammadq');
 

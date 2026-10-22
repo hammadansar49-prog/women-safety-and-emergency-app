@@ -33,10 +33,17 @@ class CloudSocial {
   final void Function(String? message)? onError;
 
   String? _me;
+  int _sessionGeneration = 0;
+
+  bool _isCurrent(String me, int generation) =>
+      _me == me &&
+      _sessionGeneration == generation &&
+      social.currentUser.username == me;
   final _subs = <void Function()>[];
   final _chatSubs = <String, void Function()>{};
   int _graphGen = 0;
   final _peers = <String, ({String name, String pub})>{};
+
   /// Profile fetches already running, so a second caller waits for the same
   /// answer instead of being told the key is missing.
   final _inFlight = <String, Future<void>>{};
@@ -51,17 +58,26 @@ class CloudSocial {
   bool get running => _me != null;
 
   Future<void> start(String me, String uid) async {
-    if (_me == me) return;
-    await stop();
-    _me = me;
-    social.onCloudOp = _onOp;
-    try {
-      await _publishIdentity(me, uid);
-    } catch (_) {
-      onError?.call(
-        'Could not reach SafeHer. Chat will connect when you are online.',
-      );
+    if (_me == me && social.currentUser.username == me) return;
+    final generation = ++_sessionGeneration;
+    await _stop();
+    if (generation != _sessionGeneration || social.currentUser.username != me) {
+      return;
     }
+    _me = me;
+    social.onCloudOp = (op) {
+      if (_isCurrent(me, generation)) _onOp(op);
+    };
+    try {
+      await _publishIdentity(me, uid, generation);
+    } catch (_) {
+      if (_isCurrent(me, generation)) {
+        onError?.call(
+          'Could not reach SafeHer. Chat will connect when you are online.',
+        );
+      }
+    }
+    if (!_isCurrent(me, generation)) return;
     _listen();
     _startPresence();
     // Wake this phone for an SOS even when the app is closed. Best effort.
@@ -139,16 +155,23 @@ class CloudSocial {
   }
 
   Future<void> stop() async {
+    ++_sessionGeneration;
+    await _stop();
+  }
+
+  Future<void> _stop() async {
+    // Cancel and invalidate synchronously, before any network await. A slow
+    // presence write must not leave the previous account's listeners alive.
+    final away = goAway();
+    _me = null;
     social.onCloudOp = null;
     _beat?.cancel();
     _beat = null;
-    await goAway();
     for (final cancel in _presenceSubs.values) {
       cancel();
     }
     _presenceSubs.clear();
     _openWith = null;
-    await _push.unregister();
     for (final cancel in _subs) {
       cancel();
     }
@@ -162,19 +185,21 @@ class CloudSocial {
     _sosLastLoc.clear();
     _inFlight.clear();
     _reqFrom = _reqTo = _linkFrom = _linkTo = null;
-    _me = null;
+    await Future.wait([away, _push.unregister()]);
   }
 
   // --- Identity -------------------------------------------------------------
 
-  Future<void> _publishIdentity(String me, String uid) async {
+  Future<void> _publishIdentity(String me, String uid, int generation) async {
     if (social.identityPriv == null) {
       final id = await e2ee.newIdentity();
+      if (!_isCurrent(me, generation)) return;
       social.setIdentity(id.priv, id.pub);
     }
     final pub =
         social.identityPub ??
         await e2ee.publicFromPrivate(social.identityPriv!);
+    if (!_isCurrent(me, generation)) return;
     final ref = _db.collection('profiles').doc(me);
     final name = social.currentUser.name;
     try {
@@ -197,17 +222,25 @@ class CloudSocial {
     bool Function()? keep,
   }) {
     final me = _me;
+    final generation = _sessionGeneration;
     StreamSubscription<T>? current;
     Timer? retry;
     var stopped = false;
     void subscribe() {
       current = make().listen(
-        onData,
+        (data) {
+          if (!stopped && me != null && _isCurrent(me, generation)) {
+            onData(data);
+          }
+        },
         onError: (Object _) {
+          if (stopped || me == null || !_isCurrent(me, generation)) return;
           if (message != null) onError?.call(message);
           current?.cancel();
           retry = Timer(const Duration(seconds: 3), () {
-            if (!stopped && _me == me && me != null && (keep?.call() ?? true)) {
+            if (!stopped &&
+                _isCurrent(me, generation) &&
+                (keep?.call() ?? true)) {
               subscribe();
             }
           });
@@ -285,6 +318,7 @@ class CloudSocial {
   Future<void> _applyGraph() async {
     final me = _me;
     if (me == null) return;
+    final generation = _sessionGeneration;
     final gen = ++_graphGen;
     // Make sure every person in the graph is known first, then apply the
     // newest lists (not the ones from before the await), and only if no newer
@@ -296,7 +330,7 @@ class CloudSocial {
     await Future.wait(
       snapshotUsers.where((u) => !_peers.containsKey(u)).map(_fetchPeer),
     );
-    if (_me != me || gen != _graphGen) return;
+    if (!_isCurrent(me, generation) || gen != _graphGen) return;
     if (_reqFrom == null ||
         _reqTo == null ||
         _linkFrom == null ||
@@ -320,13 +354,14 @@ class CloudSocial {
   }
 
   Future<void> _fetchPeer(String username) {
+    final generation = _sessionGeneration;
     final running = _inFlight[username];
     if (running != null) return running;
     final job = () async {
       try {
         final d = await _db.collection('profiles').doc(username).get();
         final data = d.data();
-        if (data != null) {
+        if (data != null && generation == _sessionGeneration) {
           _peers[username] = (
             name: (data['name'] as String?) ?? username,
             pub: (data['pub'] as String?) ?? '',
@@ -335,7 +370,7 @@ class CloudSocial {
       } catch (_) {
         // Offline, or not readable yet; the caller says so in its own words.
       } finally {
-        _inFlight.remove(username);
+        if (generation == _sessionGeneration) _inFlight.remove(username);
       }
     }();
     _inFlight[username] = job;
@@ -368,14 +403,18 @@ class CloudSocial {
     String friend,
     QuerySnapshot<Map<String, dynamic>> snap,
   ) async {
+    final generation = _sessionGeneration;
+    if (!_isCurrent(me, generation)) return;
     final priv = social.identityPriv;
     if (priv == null) return;
     if (!_peers.containsKey(friend)) await _fetchPeer(friend);
+    if (!_isCurrent(me, generation)) return;
     final pub = _peers[friend]?.pub ?? '';
     if (pub.isEmpty) return;
     final known = social.messageIds;
     final incoming = <ChatMessage>[];
     for (final d in snap.docs) {
+      if (!_isCurrent(me, generation)) return;
       final data = d.data();
       final from = data['from'] as String;
       if (from == me) {
@@ -405,6 +444,7 @@ class CloudSocial {
         } on DecryptFailure {
           audio = null;
         }
+        if (!_isCurrent(me, generation)) return;
         incoming.add(
           ChatMessage(
             id: d.id,
@@ -433,6 +473,7 @@ class CloudSocial {
       } on DecryptFailure {
         text = 'This message could not be unlocked on this device.';
       }
+      if (!_isCurrent(me, generation)) return;
       incoming.add(
         ChatMessage(
           id: d.id,
@@ -443,7 +484,7 @@ class CloudSocial {
         ),
       );
     }
-    if (_me == me) social.applyCloudMessages(incoming);
+    if (_isCurrent(me, generation)) social.applyCloudMessages(incoming);
   }
 
   /// Marks a message delivered as soon as this device has it, and read once
@@ -471,6 +512,7 @@ class CloudSocial {
   Future<void> markRead(String friend) async {
     final me = _me;
     if (me == null) return;
+    final generation = _sessionGeneration;
     try {
       final snap = await _db
           .collection('chats')
@@ -478,6 +520,7 @@ class CloudSocial {
           .collection('messages')
           .where('to', isEqualTo: me)
           .get();
+      if (!_isCurrent(me, generation)) return;
       for (final d in snap.docs) {
         _stamp(d.reference, d.data(), reading: true);
       }
@@ -489,7 +532,9 @@ class CloudSocial {
   void _onOp(CloudOp op) {
     final me = _me;
     if (me == null) return;
+    final generation = _sessionGeneration;
     _write(me, op).catchError((Object e) {
+      if (!_isCurrent(me, generation)) return;
       onError?.call(
         e is FirebaseException && e.code == 'permission-denied'
             ? 'That was not allowed.'
@@ -615,13 +660,16 @@ class CloudSocial {
   }
 
   Future<void> _sendMessage(String me, CloudOp op) async {
+    final generation = _sessionGeneration;
+    if (!_isCurrent(me, generation)) return;
+    final priv = social.identityPriv;
     final peer = op.peer;
     if (!_peers.containsKey(peer) || _peers[peer]!.pub.isEmpty) {
       _peers.remove(peer);
       await _fetchPeer(peer);
     }
+    if (!_isCurrent(me, generation)) return;
     final pub = _peers[peer]?.pub ?? '';
-    final priv = social.identityPriv;
     if (pub.isEmpty || priv == null) {
       onError?.call(
         '@$peer has not turned on private chat yet. Ask them to open SafeHer.',
@@ -634,6 +682,7 @@ class CloudSocial {
       pair: pairId(me, peer),
       text: op.text!,
     );
+    if (!_isCurrent(me, generation)) return;
     await _db
         .collection('chats')
         .doc(pairId(me, peer))
@@ -650,13 +699,16 @@ class CloudSocial {
   /// A voice note travels the same way text does: sealed for this one
   /// conversation, so the relay only ever holds noise.
   Future<void> _sendVoice(String me, CloudOp op) async {
+    final generation = _sessionGeneration;
+    if (!_isCurrent(me, generation)) return;
+    final priv = social.identityPriv;
     final peer = op.peer;
     if (!_peers.containsKey(peer) || _peers[peer]!.pub.isEmpty) {
       _peers.remove(peer);
       await _fetchPeer(peer);
     }
+    if (!_isCurrent(me, generation)) return;
     final pub = _peers[peer]?.pub ?? '';
-    final priv = social.identityPriv;
     if (pub.isEmpty || priv == null) {
       onError?.call(
         'Could not send the voice note: @$peer has not turned on private '
@@ -670,6 +722,7 @@ class CloudSocial {
       pair: pairId(me, peer),
       bytes: op.audio!,
     );
+    if (!_isCurrent(me, generation)) return;
     await _db
         .collection('chats')
         .doc(pairId(me, peer))

@@ -44,20 +44,22 @@ import 'incoming_sos_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Connect Firebase only where it is configured (Android for now). Other
-  // platforms keep running in local-only mode so nothing breaks before their
-  // Firebase apps are registered.
   // `--dart-define=SAFEHER_LOCAL=true` runs fully local (no Firebase) and signs
   // in a demo profile, for design previews and automated checks.
   const localPreview = bool.fromEnvironment('SAFEHER_LOCAL');
-  if (!localPreview && DefaultFirebaseOptions.hasPlatformOptions) {
+  if (!localPreview) {
     try {
+      if (!DefaultFirebaseOptions.hasPlatformOptions) {
+        throw StateError('Firebase is not configured for this platform.');
+      }
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
-      );
-    } catch (_) {
-      // A failed Firebase init must not block the app from opening; features
-      // that need the cloud will report their own errors.
+      ).timeout(const Duration(seconds: 30));
+    } catch (error, stack) {
+      debugPrint('SafeHer Firebase startup failed: $error');
+      debugPrintStack(stackTrace: stack);
+      runApp(CloudConnectionError(onRetry: main));
+      return;
     }
   }
   try {
@@ -101,7 +103,9 @@ Future<void> main() async {
       social.saveError =
           'Could not recover the selected photo. Please choose it again.';
     }
-    runApp(SafeHerApp(social: social, vault: vault));
+    runApp(
+      SafeHerApp(social: social, vault: vault, localPreview: localPreview),
+    );
   } catch (_) {
     runApp(
       MaterialApp(
@@ -123,10 +127,48 @@ Future<void> main() async {
   }
 }
 
+class CloudConnectionError extends StatelessWidget {
+  const CloudConnectionError({super.key, required this.onRetry});
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off_outlined, size: 40),
+              const SizedBox(height: 16),
+              const Text('Cannot connect to SafeHer'),
+              const SizedBox(height: 8),
+              const Text(
+                'Check your connection and try again. Your account data has not been changed.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              FilledButton(onPressed: onRetry, child: const Text('Retry')),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 class SafeHerApp extends StatefulWidget {
-  const SafeHerApp({super.key, this.social, this.vault});
+  const SafeHerApp({
+    super.key,
+    this.social,
+    this.vault,
+    this.localPreview = false,
+  });
   final SocialController? social;
   final LocalVault? vault;
+  final bool localPreview;
   @override
   State<SafeHerApp> createState() => _SafeHerAppState();
 }
@@ -168,38 +210,44 @@ class _SafeHerAppState extends State<SafeHerApp> with WidgetsBindingObserver {
   }
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: social,
-    builder: (context, _) {
-      // The palette is global: set it before the theme (and every widget that
-      // reads AppColors) is built for this frame.
-      AppColors.light = _useLight;
-      return MaterialApp(
-        title: 'SafeHer',
-        debugShowCheckedModeBanner: false,
-        // The active palette is global (set above), so both slots build the same
-        // theme and themeMode just picks one.
-        theme: AppTheme.build(),
-        darkTheme: AppTheme.build(),
-        themeMode: _useLight ? ThemeMode.light : ThemeMode.dark,
-        builder: (context, child) => AuroraBackground(
-          child: Stack(
-            children: [
-              child ?? const SizedBox.shrink(),
-              CallOverlay(calls: calls, social: social),
-            ],
+  Widget build(BuildContext context) {
+    if (!widget.localPreview && Firebase.apps.isEmpty) {
+      return CloudConnectionError(onRetry: main);
+    }
+    return ListenableBuilder(
+      listenable: social,
+      builder: (context, _) {
+        // The palette is global: set it before the theme (and every widget that
+        // reads AppColors) is built for this frame.
+        AppColors.light = _useLight;
+        return MaterialApp(
+          title: 'SafeHer',
+          debugShowCheckedModeBanner: false,
+          // The active palette is global (set above), so both slots build the same
+          // theme and themeMode just picks one.
+          theme: AppTheme.build(),
+          darkTheme: AppTheme.build(),
+          themeMode: _useLight ? ThemeMode.light : ThemeMode.dark,
+          builder: (context, child) => AuroraBackground(
+            child: Stack(
+              children: [
+                child ?? const SizedBox.shrink(),
+                CallOverlay(calls: calls, social: social),
+              ],
+            ),
           ),
-        ),
-        home: SafeHerShell(
-          social: social,
-          calls: calls,
-          vault: widget.vault,
-          themeMode: themeMode,
-          onThemeChanged: (mode) => social.setAppearance(mode.name),
-        ),
-      );
-    },
-  );
+          home: SafeHerShell(
+            social: social,
+            calls: calls,
+            vault: widget.vault,
+            localPreview: widget.localPreview,
+            themeMode: themeMode,
+            onThemeChanged: (mode) => social.setAppearance(mode.name),
+          ),
+        );
+      },
+    );
+  }
 }
 
 class SafeHerShell extends StatefulWidget {
@@ -211,7 +259,9 @@ class SafeHerShell extends StatefulWidget {
     this.auth,
     this.vault,
     this.calls,
+    this.localPreview = false,
   });
+  final bool localPreview;
   final LocalVault? vault;
   final AuthService? auth;
   final ThemeMode themeMode;
@@ -310,13 +360,18 @@ class _SafeHerShellState extends State<SafeHerShell>
     final uid = _backupUid;
     final vault = widget.vault;
     if (uid == null || vault == null || _backupChecked == uid) return;
+    final account = social.accountKey;
+    bool current() =>
+        social.signedIn && _backupUid == uid && social.accountKey == account;
     _backupChecked = uid;
     try {
       if (vault.backupKey(uid) != null) {
         _startCloud();
         return;
       }
-      if (await _backup!.exists(uid)) {
+      final exists = await _backup!.exists(uid);
+      if (!current()) return;
+      if (exists) {
         if (mounted) setState(() => _needsRestore = true);
         return;
       }
@@ -324,14 +379,18 @@ class _SafeHerShellState extends State<SafeHerShell>
       // backup carries it.
       if (social.identityPriv == null) {
         final id = await const E2ee().newIdentity();
+        if (!current()) return;
         social.setIdentity(id.priv, id.pub);
       }
       final enabled = await _backup!.enable(uid, social.snapshot());
       await vault.setBackupKey(uid, enabled.keyB64);
+      if (!current()) return;
       _startCloud();
       if (mounted) setState(() => _recoveryCode = enabled.recoveryCode);
     } catch (_) {
-      _backupChecked = null; // offline or rules: try again next change
+      if (current()) {
+        _backupChecked = null; // offline or rules: try again next change
+      }
     }
   }
 
@@ -355,10 +414,14 @@ class _SafeHerShellState extends State<SafeHerShell>
   Future<String?> _restoreBackup(String code) async {
     final uid = _backupUid;
     if (uid == null) return 'Not signed in.';
+    final username = social.accountKey ?? '';
+    bool current() =>
+        social.signedIn && _backupUid == uid && social.accountKey == username;
     try {
       final restored = await _backup!.restore(uid, code);
-      final username = social.accountKey ?? '';
+      if (!current()) return 'Account changed. Sign in again to restore.';
       await widget.vault?.setBackupKey(uid, restored.keyB64);
+      if (!current()) return 'Account changed. Sign in again to restore.';
       social.enterAccount(
         username,
         restored.snapshot,
@@ -379,10 +442,15 @@ class _SafeHerShellState extends State<SafeHerShell>
   Future<void> _startOverBackup() async {
     final uid = _backupUid;
     if (uid == null) return;
+    final account = social.accountKey;
+    bool current() =>
+        social.signedIn && _backupUid == uid && social.accountKey == account;
     try {
       await _backup!.reset(uid);
-      _backupChecked = null;
+      if (!current()) return;
       await widget.vault?.setBackupKey(uid, null);
+      if (!current()) return;
+      _backupChecked = null;
       if (mounted) setState(() => _needsRestore = false);
       await _settleBackup();
     } catch (_) {}
@@ -539,12 +607,12 @@ class _SafeHerShellState extends State<SafeHerShell>
     social = widget.social ?? SocialController(newAccount: true);
     auth =
         widget.auth ??
-        (Firebase.apps.isNotEmpty
-            ? FirebaseAuthService()
-            : LocalAuthService(
+        (widget.localPreview
+            ? LocalAuthService(
                 saved: widget.vault?.authData,
                 onChanged: widget.vault?.saveAuthData,
-              ));
+              )
+            : FirebaseAuthService());
     if (Firebase.apps.isNotEmpty && auth is FirebaseAuthService) {
       _backup = CloudBackup(FirestoreBackupStore());
     }
@@ -1078,7 +1146,7 @@ class _SafeHerShellState extends State<SafeHerShell>
                       child: switch (page) {
                         0 => _homePage(),
                         1 => ContactsScreen(
-                          key: ValueKey(social.currentUserId),
+                          key: ValueKey(social.accountKey ?? social.currentUserId),
                           social: social,
                           calls: calls,
                           safetyBannerBuilder: _routeSosBanner,
@@ -1788,7 +1856,7 @@ class _SafeHerShellState extends State<SafeHerShell>
         const SizedBox(height: 6),
         _note(
           'Chats are end-to-end encrypted. SOS alerts, your live location, and '
-              'voice and video calls go straight to your approved buddies.',
+          'voice and video calls go straight to your approved buddies.',
         ),
       ],
     );

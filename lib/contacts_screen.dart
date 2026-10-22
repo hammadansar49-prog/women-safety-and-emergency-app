@@ -85,35 +85,58 @@ class _ContactsScreenState extends State<ContactsScreen> {
   final _searchController = TextEditingController();
   List<RemoteProfile> _remote = [];
   int _searchToken = 0;
+  bool _searching = false;
+  String? _searchError;
   SocialController get social => widget.social;
 
   @override
   void dispose() {
+    ++_searchToken;
     _searchController.dispose();
     super.dispose();
   }
 
   Future<void> _onQuery(String value) async {
-    setState(() => query = value);
     final token = ++_searchToken;
     final search = widget.searchRemote;
+    final account = social.currentUser.username;
+    setState(() {
+      query = value;
+      _remote = [];
+      _searchError = null;
+      _searching = search != null && value.trim().isNotEmpty;
+    });
     if (search == null || value.trim().isEmpty) {
-      setState(() => _remote = []);
       return;
     }
     // Short debounce so typing does not fire a query per keystroke.
     await Future<void>.delayed(const Duration(milliseconds: 250));
-    if (token != _searchToken) return;
+    if (!mounted || token != _searchToken) return;
     try {
-      final found = await search(value);
+      final found = await search(value).timeout(const Duration(seconds: 15));
+      if (!mounted ||
+          token != _searchToken ||
+          social.currentUser.username != account) {
+        return;
+      }
       // Your own account is not someone you can befriend, so keep it out.
       final me = social.currentUser.username.toLowerCase();
       final others = found
           .where((p) => p.username.toLowerCase() != me)
           .toList();
-      if (mounted && token == _searchToken) setState(() => _remote = others);
-    } catch (_) {
-      if (mounted && token == _searchToken) setState(() => _remote = []);
+      setState(() => _remote = others);
+    } catch (error) {
+      if (mounted &&
+          token == _searchToken &&
+          social.currentUser.username == account) {
+        debugPrint('SafeHer buddy search failed: $error');
+        setState(
+          () => _searchError =
+              'Search failed. Check your connection and try again.',
+        );
+      }
+    } finally {
+      if (mounted && token == _searchToken) setState(() => _searching = false);
     }
   }
 
@@ -134,6 +157,71 @@ class _ContactsScreenState extends State<ContactsScreen> {
         calls: widget.calls,
         friendId: friendId,
         safetyBannerBuilder: widget.safetyBannerBuilder,
+      ),
+    ),
+  );
+
+  void _openRequests() => showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (_) => SafeArea(
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.7,
+        child: ListenableBuilder(
+          listenable: social,
+          builder: (context, _) => ListView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Buddy requests',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Close requests',
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              if (social.pendingIncoming.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text('No new requests', textAlign: TextAlign.center),
+                ),
+              for (final request in social.pendingIncoming)
+                RowCard(
+                  leading: AvatarDot(name: social.person(request.fromId).name),
+                  title: '@${social.person(request.fromId).username}',
+                  detail: 'wants to be your buddy',
+                  trailing: Wrap(
+                    spacing: 6,
+                    children: [
+                      PillButton(
+                        label: 'Accept',
+                        filled: true,
+                        onTap: () => _action(
+                          () => social.respondToFriendRequest(request.id, true),
+                        ),
+                      ),
+                      PillButton(
+                        label: 'Decline',
+                        tone: (AppColors.surface, AppColors.textMuted),
+                        onTap: () => _action(
+                          () =>
+                              social.respondToFriendRequest(request.id, false),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     ),
   );
@@ -231,10 +319,30 @@ class _ContactsScreenState extends State<ContactsScreen> {
             pill: true,
             shadow: true,
             onChanged: _onQuery,
+            trailing: _searching
+                ? const Padding(
+                    padding: EdgeInsets.only(left: 10),
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        semanticsLabel: 'Searching users',
+                      ),
+                    ),
+                  )
+                : null,
           ),
           if (query.trim().isNotEmpty) ...[
             const SectionLabel('Search results'),
-            if (results.isEmpty)
+            if (_searchError != null) ...[
+              Text(_searchError!),
+              TextButton(
+                onPressed: () => _onQuery(_searchController.text),
+                child: const Text('Retry search'),
+              ),
+            ],
+            if (results.isEmpty && !_searching && _searchError == null)
               Padding(
                 padding: const EdgeInsets.all(8),
                 child: Text(
@@ -244,34 +352,6 @@ class _ContactsScreenState extends State<ContactsScreen> {
               ),
             for (final person in results) _resultRow(person),
           ],
-          if (social.pendingIncoming.isNotEmpty)
-            const SectionLabel('Buddy requests'),
-          for (final request in social.pendingIncoming)
-            RowCard(
-              leading: AvatarDot(name: social.person(request.fromId).name),
-              title: '@${social.person(request.fromId).username}',
-              detail: 'wants to be your buddy',
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  PillButton(
-                    label: 'Accept',
-                    filled: true,
-                    onTap: () => _action(
-                      () => social.respondToFriendRequest(request.id, true),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  PillButton(
-                    label: 'Decline',
-                    tone: (AppColors.surface, AppColors.textMuted),
-                    onTap: () => _action(
-                      () => social.respondToFriendRequest(request.id, false),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           if (social.incomingSosRequests.isNotEmpty)
             const SectionLabel('SOS approval'),
           for (final request in social.incomingSosRequests)
@@ -300,7 +380,23 @@ class _ContactsScreenState extends State<ContactsScreen> {
                 ],
               ),
             ),
-          SectionLabel('Your buddies (${social.friends.length})'),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: SectionLabel('Your buddies (${social.friends.length})'),
+              ),
+              TextButton.icon(
+                onPressed: _openRequests,
+                icon: const Icon(Icons.person_add_alt_1_outlined, size: 18),
+                label: Text(
+                  social.pendingIncoming.isEmpty
+                      ? 'Requests'
+                      : 'Requests (${social.pendingIncoming.length})',
+                ),
+              ),
+            ],
+          ),
           if (social.friends.isEmpty)
             Padding(
               padding: const EdgeInsets.all(20),
