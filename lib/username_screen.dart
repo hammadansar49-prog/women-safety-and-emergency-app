@@ -3,10 +3,17 @@ import 'package:flutter/material.dart';
 import 'social_controller.dart';
 import 'theme/tokens.dart';
 import 'ui/design.dart';
+import 'username_check.dart';
 
 class UsernameScreen extends StatefulWidget {
-  const UsernameScreen({super.key, required this.social, this.onReserve});
+  const UsernameScreen({
+    super.key,
+    required this.social,
+    this.onReserve,
+    this.checker,
+  });
   final SocialController social;
+  final UsernameChecker? checker;
 
   /// Reserves the name in the cloud before it is claimed locally.
   final Future<void> Function(String username)? onReserve;
@@ -27,6 +34,7 @@ class _UsernameScreenState extends State<UsernameScreen> {
       setState(() => _liveError = problem);
       return;
     }
+    if (widget.checker?.isTaken ?? false) return;
     setState(() {
       _saveError = null;
       _busy = true;
@@ -89,13 +97,19 @@ class _UsernameScreenState extends State<UsernameScreen> {
             accentBorder: true,
             shadow: true,
             textInputAction: TextInputAction.done,
-            onChanged: (v) => setState(
-              () => _liveError = v.isEmpty
-                  ? null
-                  : widget.social.usernameError(v),
-            ),
+            onChanged: (v) {
+              widget.checker?.update(v);
+              setState(
+                () => _liveError = v.isEmpty
+                    ? null
+                    : widget.social.usernameError(v),
+              );
+            },
             onSubmitted: (_) => _save(),
-            trailing: _controller.text.isNotEmpty && _liveError == null
+            trailing:
+                _controller.text.isNotEmpty &&
+                    _liveError == null &&
+                    !(widget.checker?.isTaken ?? false)
                 ? Container(
                     width: 22,
                     height: 22,
@@ -112,23 +126,27 @@ class _UsernameScreenState extends State<UsernameScreen> {
                 : null,
           ),
           const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.only(left: 4),
-            child: Text(
-              _controller.text.isEmpty
-                  ? ' '
-                  : _liveError ?? '@${_controller.text.trim().toLowerCase()} is available',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: _liveError == null && _controller.text.isNotEmpty
-                    ? (AppColors.light
-                          ? const Color(0xFF1F6B45)
-                          : AppColors.success)
-                    : AppColors.danger,
+          if (widget.checker != null && _liveError == null)
+            UsernameStatusLine(checker: widget.checker!)
+          else
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: Text(
+                _controller.text.isEmpty
+                    ? ' '
+                    : _liveError ??
+                          '@${_controller.text.trim().toLowerCase()} is available',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: _liveError == null && _controller.text.isNotEmpty
+                      ? (AppColors.light
+                            ? const Color(0xFF1F6B45)
+                            : AppColors.success)
+                      : AppColors.danger,
+                ),
               ),
             ),
-          ),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(16),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'theme/tokens.dart';
 import 'ui/design.dart';
 import 'ui/motion.dart';
+import 'username_check.dart';
 
 /// Sign-in and sign-up, in the baby pink design: a blush header carrying the
 /// wordmark and headline, with the form rising over its bottom edge.
@@ -17,9 +18,11 @@ class _Field extends StatelessWidget {
     this.prefixText,
     this.textInputAction,
     this.onSubmitted,
+    this.onChanged,
     this.shadow = false,
   });
 
+  final ValueChanged<String>? onChanged;
   final bool shadow;
   final TextEditingController controller;
   final String label;
@@ -42,6 +45,7 @@ class _Field extends StatelessWidget {
       prefixText: prefixText,
       textInputAction: textInputAction,
       onSubmitted: onSubmitted,
+      onChanged: onChanged,
       shadow: shadow,
     ),
   );
@@ -128,11 +132,14 @@ Widget _footer(
   VoidCallback onTap,
 ) => Padding(
   padding: EdgeInsets.zero,
-  child: Row(
-    mainAxisAlignment: MainAxisAlignment.center,
+  // Wrap, not Row: at a large text size the two halves need their own lines
+  // rather than running off the edge.
+  child: Wrap(
+    alignment: WrapAlignment.center,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    spacing: 6,
     children: [
       Text(text, style: Theme.of(context).textTheme.bodyMedium),
-      const SizedBox(width: 6),
       GestureDetector(
         onTap: onTap,
         child: Text(
@@ -176,6 +183,18 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _error;
   bool _busy = false;
 
+  @override
+  void initState() {
+    super.initState();
+    for (final c in [_username, _password]) {
+      c.addListener(_clearError);
+    }
+  }
+
+  void _clearError() {
+    if (_error != null) setState(() => _error = null);
+  }
+
   Future<void> _run(Future<String?> Function() action) async {
     if (_busy) return;
     setState(() {
@@ -192,8 +211,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
-    _username.dispose();
-    _password.dispose();
+    for (final c in [_username, _password]) {
+      c.removeListener(_clearError);
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -291,7 +312,11 @@ class RegisterScreen extends StatefulWidget {
     required this.onRegister,
     required this.onGoogle,
     required this.onBackToLogin,
+    this.checker,
   });
+
+  /// Live username availability; optional so tests can leave it out.
+  final UsernameChecker? checker;
 
   final Future<String?> Function(
     String email,
@@ -315,6 +340,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String? _error;
   bool _busy = false;
 
+  @override
+  void initState() {
+    super.initState();
+    // A complaint about a field stops the moment that field is being fixed,
+    // instead of sitting there until the next submit.
+    for (final c in [_name, _email, _username, _password]) {
+      c.addListener(_clearError);
+    }
+  }
+
+  void _clearError() {
+    if (_error != null) setState(() => _error = null);
+  }
+
   Future<void> _run(Future<String?> Function() action) async {
     if (_busy) return;
     setState(() {
@@ -331,10 +370,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   void dispose() {
-    _name.dispose();
-    _email.dispose();
-    _username.dispose();
-    _password.dispose();
+    for (final c in [_name, _email, _username, _password]) {
+      c.removeListener(_clearError);
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -407,7 +446,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
           label: 'Username',
           icon: Icons.alternate_email,
           textInputAction: TextInputAction.next,
+          onChanged: widget.checker?.update,
         ),
+        if (widget.checker != null) UsernameStatusLine(checker: widget.checker!),
         _Field(
           controller: _password,
           label: 'Password (6+ characters)',

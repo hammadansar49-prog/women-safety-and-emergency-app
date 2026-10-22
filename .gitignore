@@ -51,3 +51,8 @@ firebase-debug.log
 .runtimeconfig.json
 *.serviceAccount.json
 service-account*.json
+
+# Android Gradle build output
+android/build/
+android/app/build/
+android/.gradle/

@@ -24,6 +24,18 @@ class LocalVault {
     await _box.flush();
   }
 
+  /// The key that seals this device's cloud backup of [uid], kept so saves
+  /// need no recovery code. Cleared when the account signs out here.
+  String? backupKey(String uid) => _box.get('bkey:$uid');
+  Future<void> setBackupKey(String uid, String? value) async {
+    if (value == null) {
+      await _box.delete('bkey:$uid');
+    } else {
+      await _box.put('bkey:$uid', value);
+    }
+    await _box.flush();
+  }
+
   /// Registered accounts of the offline sign-in (salted hashes only).
   String? get authData => _box.get('auth');
   Future<void> saveAuthData(String value) async {

@@ -60,6 +60,17 @@ class AppColors {
       light ? const Color(0xFF8A1F4B) : const Color(0xFFEFF1FE);
   static Color get success =>
       light ? const Color(0xFF2F8F5B) : const Color(0xFF4CC38A);
+
+  /// The pale fill behind a "Resolved" style badge.
+  static Color get successTint =>
+      light ? const Color(0xFFE4F2E9) : const Color(0xFF17301F);
+
+  /// The drawn mini-map in Activity: broad roads, and the dotted track walked
+  /// while an SOS was running.
+  static Color get mapRoad =>
+      light ? const Color(0xFFF4D3DC) : const Color(0xFF26222F);
+  static Color get mapTrack =>
+      light ? const Color(0xFFE7B9C7) : const Color(0xFF4A3B50);
 }
 
 /// 4px base spacing scale. Named steps with roles, not arbitrary numbers.

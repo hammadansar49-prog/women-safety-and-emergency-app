@@ -330,28 +330,44 @@ class HeaderPage extends StatelessWidget {
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
               constraints: BoxConstraints(maxWidth: maxWidth),
-              child: ListView(
-                padding: EdgeInsets.fromLTRB(22, 0, 22, bottomPadding),
-                children: [
-                  for (var i = 0; i < children.length; i++)
-                    animate
-                        ? EntranceFade(index: i, child: children[i])
-                        : children[i],
-                ],
-              ),
+              child: footer == null
+                  ? ListView(
+                      padding: EdgeInsets.fromLTRB(22, 0, 22, bottomPadding),
+                      children: _items(),
+                    )
+                  // With a footer the content scrolls and the footer sits at
+                  // the bottom when there is room, or just below the content
+                  // on a short screen, so it can never cover a button.
+                  : CustomScrollView(
+                      slivers: [
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(22, 0, 22, 36),
+                          sliver: SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                ..._items(),
+                                const Spacer(),
+                                const SizedBox(height: 24),
+                                Center(child: footer),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
             ),
           ),
         ),
-        if (footer != null)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 36,
-            child: Center(child: footer),
-          ),
       ],
     );
   }
+
+  List<Widget> _items() => [
+    for (var i = 0; i < children.length; i++)
+      animate ? EntranceFade(index: i, child: children[i]) : children[i],
+  ];
 }
 
 /// Round back button for sub-screens that sit on a blush header.
@@ -449,36 +465,47 @@ class BerryButton extends StatelessWidget {
   final IconData? icon;
 
   @override
-  Widget build(BuildContext context) => Pressable(
-    borderRadius: BorderRadius.circular(999),
-    onTap: busy ? null : onTap,
-    semanticLabel: label,
-    child: Container(
-      height: 56,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(999),
-        color: AppColors.primary,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, color: Colors.white, size: 20),
-            const SizedBox(width: 8),
-          ],
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 16,
+  Widget build(BuildContext context) {
+    // A button with nothing behind it says so, instead of looking ready and
+    // then doing nothing when it is tapped.
+    final off = onTap == null && !busy;
+    return Semantics(
+      enabled: !off,
+      child: Opacity(
+        opacity: off ? 0.45 : 1,
+        child: Pressable(
+          borderRadius: BorderRadius.circular(999),
+          onTap: busy ? null : onTap,
+          semanticLabel: label,
+          child: Container(
+            height: 56,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              color: AppColors.primary,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                ],
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// Outlined secondary action.

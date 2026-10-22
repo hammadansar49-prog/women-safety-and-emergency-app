@@ -1,3 +1,4 @@
+import 'bloom_filter.dart';
 import 'dart:convert';
 import 'dart:math';
 
@@ -41,6 +42,16 @@ abstract class AuthService {
     String name = '',
   });
 
+  /// Offline hint: true when [username] was free as of the last Bloom filter
+  /// update, null when nothing is known.
+  bool? quickUsernameCheck(String username) => null;
+
+  /// The database's answer: true if free, false if taken, null if unknown.
+  Future<bool?> usernameAvailable(String username) async => null;
+
+  /// The signed-in account's id, when it has a cloud identity.
+  String? get uid => null;
+
   /// The signed-in account's display name, if it has one.
   String? get displayName => null;
 
@@ -73,6 +84,41 @@ class FirebaseAuthService implements AuthService {
   final FirebaseAuth _auth;
   final FirebaseFirestore _db;
   bool _googleReady = false;
+  BloomFilter? _bloom;
+  bool _bloomRequested = false;
+
+  /// Loads the server-built Bloom filter once; absent filter just means no
+  /// instant hint, the database check still runs.
+  void _loadBloom() {
+    if (_bloomRequested) return;
+    _bloomRequested = true;
+    _db
+        .collection('meta')
+        .doc('usernames')
+        .get()
+        .then((d) {
+          final data = d.data();
+          if (data != null) _bloom = BloomFilter.fromJson(data);
+        })
+        .catchError((Object _) {});
+  }
+
+  @override
+  bool? quickUsernameCheck(String username) {
+    _loadBloom();
+    final bloom = _bloom;
+    if (bloom == null) return null;
+    return bloom.mightContain(normalizeUsername(username)) ? null : true;
+  }
+
+  @override
+  Future<bool?> usernameAvailable(String username) async {
+    try {
+      return !(await _name(normalizeUsername(username)).get()).exists;
+    } catch (_) {
+      return null;
+    }
+  }
 
   DocumentReference<Map<String, dynamic>> _name(String u) =>
       _db.collection('usernames').doc(u);
@@ -105,6 +151,9 @@ class FirebaseAuthService implements AuthService {
       }
     } catch (_) {}
   }
+
+  @override
+  String? get uid => _auth.currentUser?.uid;
 
   @override
   String? get displayName => _auth.currentUser?.displayName;
@@ -305,6 +354,16 @@ class LocalAuthService implements AuthService {
       'taken': _everTaken.toList(),
     }),
   );
+
+  @override
+  String? get uid => null;
+
+  @override
+  bool? quickUsernameCheck(String username) => null;
+
+  @override
+  Future<bool?> usernameAvailable(String username) async =>
+      !_everTaken.contains(normalizeUsername(username));
 
   @override
   String? get displayName => null;

@@ -35,6 +35,46 @@ class SosContactRequest {
   final String recipientId;
 }
 
+/// What a row in a conversation is. Calls leave a trace in the chat the same
+/// way they do in a phone's call log, so a missed one is not silent.
+enum MessageKind { text, voice, missedVoiceCall, missedVideoCall }
+
+/// How far one of your own messages has travelled.
+enum MessageStatus { sent, delivered, read }
+
+/// Whether someone has SafeHer open, when they last did, and which
+/// conversation they are reading. Never carries message content.
+@immutable
+class Presence {
+  const Presence({this.online = false, this.lastSeen, this.openWith});
+  final bool online;
+  final DateTime? lastSeen;
+
+  /// The username whose chat they have open, when they are in one.
+  final String? openWith;
+
+  bool readingWith(String id) => online && openWith == id;
+
+  /// "online", "last seen today at 9:04 PM", or nothing when never seen.
+  String get label {
+    if (online) return 'online';
+    final at = lastSeen?.toLocal();
+    if (at == null) return '';
+    final now = DateTime.now();
+    final hour = at.hour % 12 == 0 ? 12 : at.hour % 12;
+    final clock =
+        '$hour:${at.minute.toString().padLeft(2, '0')} ${at.hour < 12 ? 'AM' : 'PM'}';
+    final sameDay =
+        at.year == now.year && at.month == now.month && at.day == now.day;
+    if (sameDay) return 'last seen today at $clock';
+    final y = now.subtract(const Duration(days: 1));
+    if (at.year == y.year && at.month == y.month && at.day == y.day) {
+      return 'last seen yesterday at $clock';
+    }
+    return 'last seen ${at.day}/${at.month} at $clock';
+  }
+}
+
 @immutable
 class ChatMessage {
   const ChatMessage({
@@ -43,12 +83,25 @@ class ChatMessage {
     required this.recipientId,
     required this.text,
     required this.createdAt,
+    this.kind = MessageKind.text,
+    this.audio,
+    this.seconds = 0,
   });
   final String id;
   final String senderId;
   final String recipientId;
   final String text;
   final DateTime createdAt;
+  final MessageKind kind;
+
+  /// The decoded voice note, held only in memory.
+  final Uint8List? audio;
+  final int seconds;
+
+  bool get isVoice => kind == MessageKind.voice;
+  bool get isCall =>
+      kind == MessageKind.missedVoiceCall ||
+      kind == MessageKind.missedVideoCall;
 }
 
 enum LocalSosStatus { active, cancelled, resolved }
@@ -100,7 +153,35 @@ class LocalSosEvent {
   );
 }
 
-/// Local account state. Persistence is injected; networking is not connected.
+/// Something the account did that other devices must hear about. Fired after
+/// the local change; the cloud layer turns it into a write.
+@immutable
+class CloudOp {
+  const CloudOp(
+    this.kind,
+    this.peer, {
+    this.id,
+    this.text,
+    this.audio,
+    this.seconds = 0,
+  });
+
+  /// request, unfriend, accept, link (my SOS ask to peer), unlink (my ask),
+  /// approve (peer's ask to me), revoke (delete peer's ask to me), message,
+  /// voice.
+  final String kind;
+  final String peer;
+  final String? id;
+  final String? text;
+
+  /// Set for a voice note, alongside its length.
+  final Uint8List? audio;
+  final int seconds;
+}
+
+/// Local account state. Persistence is injected; the cloud layer (if any)
+/// listens through [onCloudOp] and feeds remote changes back with the
+/// `applyCloud...` methods.
 class SocialController extends ChangeNotifier {
   SocialController({bool newAccount = false}) {
     if (newAccount) {
@@ -125,7 +206,22 @@ class SocialController extends ChangeNotifier {
     _lockedIdentity = true;
   }
   bool _lockedIdentity = false;
-  bool get cloudConnected => false;
+
+  /// Set when this account is connected to the cloud.
+  void Function(CloudOp op)? onCloudOp;
+  void _emit(CloudOp op) => onCloudOp?.call(op);
+
+  // --- Chat identity (X25519). The private half stays in the snapshot, which
+  // is only ever stored on the device or sealed in the encrypted backup.
+  String? identityPriv;
+  String? identityPub;
+  void setIdentity(String priv, String pub) {
+    identityPriv = priv;
+    identityPub = pub;
+    notifyListeners();
+  }
+
+  bool get cloudConnected => onCloudOp != null;
   String? get email => null;
   Future<LocalSosEvent> activateSos() async => createSos();
   Future<void> lookupUsername(String value) async {}
@@ -155,9 +251,9 @@ class SocialController extends ChangeNotifier {
     // The baby pink light design is the default until the user picks otherwise.
     appearance = appearanceChosen ? (m['appearance'] ?? 'light') : 'light';
     countdown = m['countdown'] ?? 5;
-    shortcutKey = m['shortcutKey'] == 'volumeDown'
-        ? 'volumeDown'
-        : 'volumeUp';
+    shortcutKey = m['shortcutKey'] == 'volumeDown' ? 'volumeDown' : 'volumeUp';
+    identityPriv = m['idPriv'] as String?;
+    identityPub = m['idPub'] as String?;
     _pinSalt = m['pinSalt'] as String?;
     _pinHash = m['pinHash'] as String?;
     guideSeen = m['guideSeen'] == true;
@@ -172,6 +268,7 @@ class SocialController extends ChangeNotifier {
       );
     }
     for (final r in m['messages']) {
+      final audio = r['audio'] as String?;
       _messages.add(
         ChatMessage(
           id: r['id'],
@@ -179,6 +276,12 @@ class SocialController extends ChangeNotifier {
           recipientId: r['to'],
           text: r['text'],
           createdAt: DateTime.parse(r['time']),
+          kind: MessageKind.values.firstWhere(
+            (k) => k.name == r['kind'],
+            orElse: () => MessageKind.text,
+          ),
+          audio: audio == null ? null : base64Decode(audio),
+          seconds: (r['secs'] as num?)?.toInt() ?? 0,
         ),
       );
     }
@@ -245,6 +348,8 @@ class SocialController extends ChangeNotifier {
     shortcutKey = 'volumeUp';
     _pinSalt = null;
     _pinHash = null;
+    identityPriv = null;
+    identityPub = null;
     guideSeen = false;
     _photos.clear();
     _friendships.clear();
@@ -280,7 +385,9 @@ class SocialController extends ChangeNotifier {
     } else {
       _profiles[0] = DemoPerson(
         id: 'hammad',
-        name: name.isEmpty ? (username.isEmpty ? 'SafeHer user' : username) : name,
+        name: name.isEmpty
+            ? (username.isEmpty ? 'SafeHer user' : username)
+            : name,
         username: username,
       );
     }
@@ -327,55 +434,67 @@ class SocialController extends ChangeNotifier {
     notifyListeners();
   }
 
-  String snapshot() => jsonEncode({
-    'version': 1,
-    'current': currentUserId,
-    'sequence': _sequence,
-    'signedIn': signedIn,
-    'appearance': appearance,
-    'appearanceChosen': appearanceChosen,
-    'countdown': countdown,
-    'shortcutKey': shortcutKey,
-    'pinSalt': _pinSalt,
-    'pinHash': _pinHash,
-    'guideSeen': guideSeen,
-    'photos': _photos,
-    'profiles': [
-      for (final p in profiles)
-        {'id': p.id, 'name': p.name, 'username': p.username},
-    ],
-    'friends': _friendships.toList(),
-    'favorites': _favorites.toList(),
-    'approved': _approved.toList(),
-    'pending': _pendingConsent.toList(),
-    'requests': [
-      for (final r in _requests) {'id': r.id, 'from': r.fromId, 'to': r.toId},
-    ],
-    'messages': [
-      for (final r in _messages)
-        {
-          'id': r.id,
-          'from': r.senderId,
-          'to': r.recipientId,
-          'text': r.text,
-          'time': r.createdAt.toIso8601String(),
-        },
-    ],
-    'events': [
-      for (final r in _events)
-        {
-          'id': r.id,
-          'from': r.senderId,
-          'to': r.recipientIds,
-          'status': r.status.name,
-          'time': r.createdAt.toIso8601String(),
-          'lat': r.lastLat,
-          'lng': r.lastLng,
-          'locAt': r.lastLocationAt?.toIso8601String(),
-          'endedAt': r.endedAt?.toIso8601String(),
-        },
-    ],
-  });
+  String snapshot() {
+    final keepAudio = _audioToKeep();
+    return jsonEncode({
+      'version': 1,
+      'current': currentUserId,
+      'sequence': _sequence,
+      'signedIn': signedIn,
+      'appearance': appearance,
+      'appearanceChosen': appearanceChosen,
+      'countdown': countdown,
+      'shortcutKey': shortcutKey,
+      'idPriv': identityPriv,
+      'idPub': identityPub,
+      'pinSalt': _pinSalt,
+      'pinHash': _pinHash,
+      'guideSeen': guideSeen,
+      'photos': _photos,
+      'profiles': [
+        for (final p in profiles)
+          {'id': p.id, 'name': p.name, 'username': p.username},
+      ],
+      'friends': _friendships.toList(),
+      'favorites': _favorites.toList(),
+      'approved': _approved.toList(),
+      'pending': _pendingConsent.toList(),
+      'requests': [
+        for (final r in _requests) {'id': r.id, 'from': r.fromId, 'to': r.toId},
+      ],
+      'messages': [
+        for (final r in _messages)
+          {
+            'id': r.id,
+            'from': r.senderId,
+            'to': r.recipientId,
+            'text': r.text,
+            'time': r.createdAt.toIso8601String(),
+            if (r.kind != MessageKind.text) 'kind': r.kind.name,
+            // Only the newest voice notes keep their audio on this device, so a
+            // long conversation cannot grow the vault without limit. Older ones
+            // come back from the relay, still sealed, when it is reachable.
+            if (r.audio != null && keepAudio.contains(r.id))
+              'audio': base64Encode(r.audio!),
+            if (r.seconds > 0) 'secs': r.seconds,
+          },
+      ],
+      'events': [
+        for (final r in _events)
+          {
+            'id': r.id,
+            'from': r.senderId,
+            'to': r.recipientIds,
+            'status': r.status.name,
+            'time': r.createdAt.toIso8601String(),
+            'lat': r.lastLat,
+            'lng': r.lastLng,
+            'locAt': r.lastLocationAt?.toIso8601String(),
+            'endedAt': r.endedAt?.toIso8601String(),
+          },
+      ],
+    });
+  }
 
   Future<void> Function(String)? persist;
   Future<void> _pendingSave = Future.value();
@@ -508,6 +627,18 @@ class SocialController extends ChangeNotifier {
   DemoPerson get currentUser => person(currentUserId);
   int _sequence = 0;
   String _id() => '${++_sequence}';
+
+  /// Message ids are shared with the cloud copy, so they must not repeat
+  /// across devices.
+  String _messageId() {
+    final r = Random.secure();
+    final tail = List.generate(
+      6,
+      (_) => r.nextInt(36).toRadixString(36),
+    ).join();
+    return '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}$tail';
+  }
+
   final List<FriendRequest> _requests = [];
   final Set<String> _friendships = {};
   final Set<String> _favorites = {};
@@ -577,6 +708,7 @@ class SocialController extends ChangeNotifier {
       );
     }
     _requests.add(FriendRequest(id: _id(), fromId: currentUserId, toId: toId));
+    _emit(CloudOp('request', toId));
     notifyListeners();
   }
 
@@ -591,6 +723,7 @@ class SocialController extends ChangeNotifier {
     }
     _requests.remove(request);
     if (accept) _friendships.add(_pair(request.fromId, request.toId));
+    _emit(CloudOp(accept ? 'accept' : 'unfriend', request.fromId));
     notifyListeners();
   }
 
@@ -600,6 +733,7 @@ class SocialController extends ChangeNotifier {
       throw StateError('Only the sender can cancel.');
     }
     _requests.remove(request);
+    _emit(CloudOp('unfriend', request.toId));
     notifyListeners();
   }
 
@@ -621,6 +755,9 @@ class SocialController extends ChangeNotifier {
       _approved.remove(key);
       _pendingConsent.remove(key);
     }
+    _emit(CloudOp('unlink', friendId));
+    _emit(CloudOp('revoke', friendId));
+    _emit(CloudOp('unfriend', friendId));
     notifyListeners();
   }
 
@@ -634,6 +771,140 @@ class SocialController extends ChangeNotifier {
       areFriends(sender, recipient) &&
       _favorites.contains(_directed(sender, recipient)) &&
       _approved.contains(_directed(sender, recipient));
+
+  // --- Remote state (from the cloud layer) -------------------------------
+
+  /// Replaces friends, requests and SOS permissions with what the cloud says.
+  /// [mine] is this account's username; everyone else is identified by theirs.
+  void applyCloudGraph({
+    required String mine,
+    required List<({String from, String to, String status})> reqs,
+    required List<({String from, String to, String status})> links,
+    required Map<String, String> names,
+  }) {
+    String id(String u) => u == mine ? currentUserId : u;
+    void know(String u) {
+      if (u == mine || _profiles.any((p) => p.id == u)) return;
+      _profiles.add(DemoPerson(id: u, name: names[u] ?? u, username: u));
+    }
+
+    for (final r in reqs) {
+      know(r.from);
+      know(r.to);
+    }
+    for (final l in links) {
+      know(l.from);
+      know(l.to);
+    }
+    for (var i = 0; i < _profiles.length; i++) {
+      final p = _profiles[i];
+      final name = names[p.id];
+      if (p.id != currentUserId &&
+          name != null &&
+          name.isNotEmpty &&
+          name != p.name) {
+        _profiles[i] = DemoPerson(id: p.id, name: name, username: p.username);
+      }
+    }
+    _requests.clear();
+    _friendships.clear();
+    _favorites.clear();
+    _approved.clear();
+    _pendingConsent.clear();
+    for (final r in reqs) {
+      if (r.status == 'accepted') {
+        _friendships.add(_pair(id(r.from), id(r.to)));
+      } else {
+        _requests.add(
+          FriendRequest(
+            id: '${r.from}>${r.to}',
+            fromId: id(r.from),
+            toId: id(r.to),
+          ),
+        );
+      }
+    }
+    for (final l in links) {
+      final key = _directed(id(l.from), id(l.to));
+      _favorites.add(key);
+      if (l.status == 'approved') {
+        _approved.add(key);
+      } else {
+        _pendingConsent.add(key);
+      }
+    }
+    notifyListeners();
+  }
+
+  /// Ids of the messages held on this device.
+  Set<String> get messageIds => {for (final m in _messages) m.id};
+
+  /// A problem with the cloud connection worth showing, or null.
+  String? syncError;
+  void setSyncError(String? message) {
+    if (message == syncError) return;
+    syncError = message;
+    super.notifyListeners();
+  }
+
+  /// Replaces the SOS alerts other people sent to this account.
+  void applyCloudAlerts(
+    List<
+      ({
+        String id,
+        String sender,
+        String status,
+        DateTime createdAt,
+        double? lat,
+        double? lng,
+        DateTime? locAt,
+        DateTime? endedAt,
+      })
+    >
+    alerts,
+  ) {
+    final ids = alerts.map((a) => a.id).toSet();
+    _events.removeWhere(
+      (e) => e.senderId != currentUserId && !ids.contains(e.id),
+    );
+    for (final a in alerts) {
+      if (!_profiles.any((p) => p.id == a.sender)) {
+        _profiles.add(
+          DemoPerson(id: a.sender, name: a.sender, username: a.sender),
+        );
+      }
+      final next = LocalSosEvent(
+        id: a.id,
+        senderId: a.sender,
+        recipientIds: [currentUserId],
+        status: LocalSosStatus.values.firstWhere(
+          (s) => s.name == a.status,
+          orElse: () => LocalSosStatus.active,
+        ),
+        createdAt: a.createdAt,
+        lastLat: a.lat,
+        lastLng: a.lng,
+        lastLocationAt: a.locAt,
+        endedAt: a.endedAt,
+      );
+      final i = _events.indexWhere((e) => e.id == a.id);
+      if (i == -1) {
+        _events.add(next);
+      } else {
+        _events[i] = next;
+      }
+    }
+    notifyListeners();
+  }
+
+  /// Adds messages the cloud delivered that this device has not seen.
+  void applyCloudMessages(List<ChatMessage> incoming) {
+    final known = _messages.map((m) => m.id).toSet();
+    final fresh = incoming.where((m) => !known.contains(m.id)).toList();
+    if (fresh.isEmpty) return;
+    _messages.addAll(fresh);
+    notifyListeners();
+  }
 
   /// Preview helper for local mode: makes [friendId] a buddy with a first
   /// message so the chat screen has something to show. Never used with cloud
@@ -691,6 +962,7 @@ class SocialController extends ChangeNotifier {
     }
     _favorites.add(key);
     if (!_approved.contains(key)) _pendingConsent.add(key);
+    _emit(CloudOp('link', friendId));
     notifyListeners();
   }
 
@@ -700,6 +972,7 @@ class SocialController extends ChangeNotifier {
     _favorites.remove(key);
     _approved.remove(key);
     _pendingConsent.remove(key);
+    _emit(CloudOp('unlink', friendId));
     notifyListeners();
   }
 
@@ -717,6 +990,7 @@ class SocialController extends ChangeNotifier {
       throw StateError('No pending SOS permission request.');
     }
     if (accept) _approved.add(key);
+    _emit(CloudOp(accept ? 'approve' : 'revoke', senderId));
     notifyListeners();
   }
 
@@ -725,6 +999,7 @@ class SocialController extends ChangeNotifier {
     final key = _directed(senderId, currentUserId);
     if (!_approved.remove(key)) throw StateError('No approved SOS permission.');
     _pendingConsent.remove(key);
+    _emit(CloudOp('revoke', senderId));
     notifyListeners();
   }
 
@@ -738,15 +1013,110 @@ class SocialController extends ChangeNotifier {
     if (cleaned.isEmpty || cleaned.length > 2000) {
       throw StateError('Use 1 to 2000 characters.');
     }
+    final id = _messageId();
     _messages.add(
       ChatMessage(
-        id: _id(),
+        id: id,
         senderId: currentUserId,
         recipientId: friendId,
         text: cleaned,
         createdAt: DateTime.now(),
       ),
     );
+    _emit(CloudOp('message', friendId, id: id, text: cleaned));
+    notifyListeners();
+  }
+
+  // --- Who is around --------------------------------------------------------
+
+  final _presence = <String, Presence>{};
+
+  /// How far a sent message has got. One tick means it is on its way, two
+  /// that their device has it, two in blue that they have read it.
+  final _receipts = <String, ({DateTime? delivered, DateTime? read})>{};
+
+  MessageStatus statusOf(String messageId) {
+    final r = _receipts[messageId];
+    if (r == null) return MessageStatus.sent;
+    if (r.read != null) return MessageStatus.read;
+    if (r.delivered != null) return MessageStatus.delivered;
+    return MessageStatus.sent;
+  }
+
+  void applyReceipt(String messageId, {DateTime? delivered, DateTime? read}) {
+    final old = _receipts[messageId];
+    if (old?.delivered == delivered && old?.read == read) return;
+    _receipts[messageId] = (delivered: delivered, read: read);
+    notifyListeners();
+  }
+
+  /// Told which conversation is open, so the cloud layer can publish it.
+  void Function(String? peer)? onChatOpen;
+
+  void enterChat(String id) => onChatOpen?.call(id);
+  void leaveChat() => onChatOpen?.call(null);
+
+  Presence presenceOf(String id) => _presence[id] ?? const Presence();
+
+  /// Fed by the cloud layer as buddies open and close the app.
+  void applyPresence(String id, Presence p) {
+    _presence[id] = p;
+    notifyListeners();
+  }
+
+  /// Records a call nobody picked up. Each device writes its own line — the
+  /// caller's and the callee's — so nothing has to travel for the chat to show
+  /// it, and it works with no signal.
+  void noteMissedCall(
+    String friendId, {
+    required bool video,
+    required bool outgoing,
+  }) {
+    if (!areFriends(currentUserId, friendId)) return;
+    _messages.add(
+      ChatMessage(
+        id: _messageId(),
+        senderId: outgoing ? currentUserId : friendId,
+        recipientId: outgoing ? friendId : currentUserId,
+        text: '',
+        createdAt: DateTime.now(),
+        kind: video ? MessageKind.missedVideoCall : MessageKind.missedVoiceCall,
+      ),
+    );
+    notifyListeners();
+  }
+
+  /// The ids of the most recent voice notes, whose audio is worth keeping on
+  /// this device.
+  static const _audioKept = 20;
+
+  /// Recomputed once per save, not once per message.
+  Set<String> _audioToKeep() {
+    final withAudio = _messages.where((m) => m.audio != null).toList();
+    final from = withAudio.length <= _audioKept
+        ? 0
+        : withAudio.length - _audioKept;
+    return withAudio.sublist(from).map((m) => m.id).toSet();
+  }
+
+  /// Sends a recorded voice note. The bytes go out sealed, exactly like text.
+  void sendVoice(String friendId, Uint8List audio, int seconds) {
+    _requireFriend(friendId);
+    if (audio.isEmpty || seconds < 1) return;
+    final id = _messageId();
+    _messages.add(
+      ChatMessage(
+        id: id,
+        senderId: currentUserId,
+        recipientId: friendId,
+        text: '',
+        createdAt: DateTime.now(),
+        kind: MessageKind.voice,
+        audio: audio,
+        seconds: seconds,
+      ),
+    );
+    _emit(CloudOp('voice', friendId, id: id, audio: audio, seconds: seconds));
     notifyListeners();
   }
 
@@ -774,13 +1144,14 @@ class SocialController extends ChangeNotifier {
       );
     }
     final event = LocalSosEvent(
-      id: _id(),
+      id: _messageId(),
       senderId: currentUserId,
       recipientIds: recipients,
       status: LocalSosStatus.active,
       createdAt: DateTime.now(),
     );
     _events.add(event);
+    _emit(CloudOp('sosStart', '', id: event.id, text: recipients.join(',')));
     notifyListeners();
     return event;
   }
@@ -799,6 +1170,14 @@ class SocialController extends ChangeNotifier {
       status: cancelled ? LocalSosStatus.cancelled : LocalSosStatus.resolved,
       endedAt: DateTime.now(),
     );
+    _emit(
+      CloudOp(
+        'sosEnd',
+        '',
+        id: eventId,
+        text: cancelled ? 'cancelled' : 'resolved',
+      ),
+    );
     notifyListeners();
   }
 
@@ -811,6 +1190,14 @@ class SocialController extends ChangeNotifier {
       lastLat: lat,
       lastLng: lng,
       lastLocationAt: at,
+    );
+    _emit(
+      CloudOp(
+        'sosLoc',
+        '',
+        id: eventId,
+        text: '$lat,$lng,${at.toIso8601String()}',
+      ),
     );
     notifyListeners();
   }

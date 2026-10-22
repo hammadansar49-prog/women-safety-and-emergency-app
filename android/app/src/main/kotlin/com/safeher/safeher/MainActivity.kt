@@ -27,6 +27,31 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "safeher/media")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "start" -> {
+                        val intent = Intent(this, SosMediaService::class.java).apply {
+                            action = SosMediaService.ACTION_START
+                        }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(intent)
+                        } else {
+                            startService(intent)
+                        }
+                        result.success(null)
+                    }
+                    "stop" -> {
+                        startService(
+                            Intent(this, SosMediaService::class.java).apply {
+                                action = SosMediaService.ACTION_STOP
+                            },
+                        )
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         val ch = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "safeher/shortcut")
         channel = ch
         ch.setMethodCallHandler { call, result ->

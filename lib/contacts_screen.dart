@@ -1,6 +1,7 @@
 import 'auth_service.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'call_controller.dart';
 import 'chat_screen.dart';
 import 'social_controller.dart';
 import 'theme/tokens.dart';
@@ -65,11 +66,15 @@ class ContactsScreen extends StatefulWidget {
     required this.social,
     this.safetyBannerBuilder,
     this.searchRemote,
+    this.calls,
   });
   final SocialController social;
 
   /// Searches accounts across the whole service (null = local only).
   final Future<List<RemoteProfile>> Function(String prefix)? searchRemote;
+
+  /// Lets a chat opened from here place a real call.
+  final CallController? calls;
   final WidgetBuilder? safetyBannerBuilder;
   @override
   State<ContactsScreen> createState() => _ContactsScreenState();
@@ -101,7 +106,12 @@ class _ContactsScreenState extends State<ContactsScreen> {
     if (token != _searchToken) return;
     try {
       final found = await search(value);
-      if (mounted && token == _searchToken) setState(() => _remote = found);
+      // Your own account is not someone you can befriend, so keep it out.
+      final me = social.currentUser.username.toLowerCase();
+      final others = found
+          .where((p) => p.username.toLowerCase() != me)
+          .toList();
+      if (mounted && token == _searchToken) setState(() => _remote = others);
     } catch (_) {
       if (mounted && token == _searchToken) setState(() => _remote = []);
     }
@@ -121,6 +131,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
     SafeRoute<void>(
       builder: (_) => ChatScreen(
         social: social,
+        calls: widget.calls,
         friendId: friendId,
         safetyBannerBuilder: widget.safetyBannerBuilder,
       ),
@@ -201,7 +212,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
         for (final r in _remote)
           if (r.uid != social.currentUserId &&
               !known.contains(r.username.toLowerCase()))
-            DemoPerson(id: r.uid, name: r.username, username: r.username),
+            DemoPerson(id: r.username, name: r.username, username: r.username),
       ];
       return HeaderPage(
         animate: false,

@@ -30,9 +30,211 @@ service cloud.firestore {
       allow create: if request.auth != null
         && name.matches('^[a-z0-9_]{3,20}$')
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.keys().hasOnly(['uid', 'username'])
+        && request.resource.data.keys().hasOnly(['uid', 'username', 'name', 'pub'])
         && request.resource.data.username == name;
-      allow update, delete: if false;
+      // The owner may publish a display name and the public chat key.
+      allow update: if request.auth != null
+        && request.auth.uid == resource.data.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'pub'])
+        && request.resource.data.get('pub', '').size() <= 64
+        && request.resource.data.get('name', '').size() <= 60;
+      allow delete: if false;
+    }
+
+    // Encrypted account backup. Only the owner can touch it; the contents are
+    // ciphertext sealed on the device, the server cannot read them. The wrapping
+    // fields are write-once, only the data and its timestamp can change.
+    match /backups/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['v', 'salt', 'wrapped', 'data', 'updatedAt'])
+        && request.resource.data.data is string
+        && request.resource.data.data.size() < 900000;
+      allow update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['data', 'updatedAt'])
+        && request.resource.data.data is string
+        && request.resource.data.data.size() < 900000;
+      allow delete: if request.auth != null && request.auth.uid == uid;
+      allow list: if false;
+    }
+
+    // --- Social graph -----------------------------------------------------
+    // One document per pair of accounts (id = the two usernames, sorted).
+    // pending -> accepted by the recipient; anyone in the pair may delete it
+    // (cancel, decline, unfriend).
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.username;
+    }
+    function pairId(a, b) {
+      return a < b ? a + '__' + b : b + '__' + a;
+    }
+    function friendsOf(pair) {
+      let r = get(/databases/$(database)/documents/friendReqs/$(pair)).data;
+      return r.status == 'accepted' && (r.from == me() || r.to == me());
+    }
+
+    match /friendReqs/{pair} {
+      allow get, list: if request.auth != null
+        && (resource.data.from == me() || resource.data.to == me());
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['from', 'to', 'status', 'createdAt'])
+        && request.resource.data.from == me()
+        && request.resource.data.to != request.resource.data.from
+        && request.resource.data.status == 'pending'
+        && pair == pairId(request.resource.data.from, request.resource.data.to)
+        && exists(/databases/$(database)/documents/profiles/$(request.resource.data.to));
+      allow update: if request.auth != null
+        && resource.data.to == me()
+        && resource.data.status == 'pending'
+        && request.resource.data.status == 'accepted'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+      allow delete: if request.auth != null
+        && (resource.data.from == me() || resource.data.to == me());
+    }
+
+    // End-to-end encrypted chat. The server holds ciphertext only. Only the two
+    // accepted friends can read or add messages, and a message is immutable.
+    match /chats/{pair}/messages/{id} {
+      allow get, list: if request.auth != null && friendsOf(pair);
+      // Text, or a short voice note: both arrive sealed, so the server only
+      // ever holds ciphertext. A voice note is bigger, and capped so one
+      // message can never approach the document limit.
+      allow create: if request.auth != null && friendsOf(pair)
+        && request.resource.data.from == me()
+        && pairId(request.resource.data.from, request.resource.data.to) == pair
+        && request.resource.data.createdAt == request.time
+        && (
+          (request.resource.data.keys().hasOnly(['from', 'to', 'ct', 'createdAt'])
+            && request.resource.data.ct is string
+            && request.resource.data.ct.size() < 8000)
+          ||
+          (request.resource.data.keys().hasOnly(['from', 'to', 'voice', 'secs', 'createdAt'])
+            && request.resource.data.voice is string
+            && request.resource.data.voice.size() < 700000
+            && request.resource.data.secs is int
+            && request.resource.data.secs > 0
+            && request.resource.data.secs <= 60)
+        );
+      // Only the person it was sent to may mark it delivered or read, and only
+      // by adding those stamps — the ciphertext itself can never be touched.
+      allow update: if request.auth != null && friendsOf(pair)
+        && resource.data.to == me()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['deliveredAt', 'readAt'])
+        && request.resource.data.keys().hasOnly(
+             ['from', 'to', 'ct', 'voice', 'secs', 'createdAt',
+              'deliveredAt', 'readAt']);
+      allow delete: if false;
+    }
+
+    // "May I send my SOS to you": from -> to. The sender asks (pending), only
+    // the recipient can approve, either side can withdraw.
+    match /sosLinks/{link} {
+      allow get, list: if request.auth != null
+        && (resource.data.from == me() || resource.data.to == me());
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['from', 'to', 'status'])
+        && request.resource.data.from == me()
+        && request.resource.data.status == 'pending'
+        && link == request.resource.data.from + '__' + request.resource.data.to
+        && friendsOf(pairId(request.resource.data.from, request.resource.data.to));
+      allow update: if request.auth != null
+        && resource.data.to == me()
+        && resource.data.status == 'pending'
+        && request.resource.data.status == 'approved'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+      allow delete: if request.auth != null
+        && (resource.data.from == me() || resource.data.to == me());
+    }
+
+    // One alert per (SOS, recipient). Only the sender writes it, and only to a
+    // buddy who has approved. The sender can withdraw an alert (for example when
+    // removing that buddy); nobody else can change or delete it.
+    match /sosAlerts/{alert} {
+      allow get, list: if request.auth != null
+        && (resource.data.sender == me() || resource.data.recipient == me());
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['sender', 'recipient', 'eventId', 'status', 'createdAt', 'lat', 'lng', 'locAt', 'endedAt'])
+        && request.resource.data.sender == me()
+        && request.resource.data.status == 'active'
+        && alert == request.resource.data.eventId + '_' + request.resource.data.recipient
+        && get(/databases/$(database)/documents/sosLinks/$(request.resource.data.sender + '__' + request.resource.data.recipient)).data.status == 'approved';
+      allow update: if request.auth != null
+        && resource.data.sender == me()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lat', 'lng', 'locAt', 'endedAt'])
+        && request.resource.data.status in ['active', 'cancelled', 'resolved']
+        && (resource.data.status == 'active' || request.resource.data.status == resource.data.status);
+      allow delete: if request.auth != null && resource.data.sender == me();
+    }
+
+    // Audio/video calls and the SOS live view. A call is a signalling document
+    // (offer, answer, status); the media itself goes peer to peer. Only friends
+    // can ring each other, and an SOS live view only goes to an approved buddy.
+    function inCall(call) {
+      let c = get(/databases/$(database)/documents/calls/$(call)).data;
+      return c.caller == me() || c.callee == me();
+    }
+
+    match /calls/{call} {
+      allow get, list: if request.auth != null
+        && (resource.data.caller == me() || resource.data.callee == me());
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['caller', 'callee', 'kind', 'status', 'offer', 'createdAt'])
+        && request.resource.data.caller == me()
+        && request.resource.data.status == 'ringing'
+        && request.resource.data.kind in ['audio', 'video', 'sos']
+        && friendsOf(pairId(request.resource.data.caller, request.resource.data.callee))
+        && (request.resource.data.kind != 'sos'
+          || get(/databases/$(database)/documents/sosLinks/$(request.resource.data.caller + '__' + request.resource.data.callee)).data.status == 'approved');
+      allow update: if request.auth != null
+        && (resource.data.caller == me() || resource.data.callee == me())
+        && resource.data.status != 'ended'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'answer', 'endedAt'])
+        && request.resource.data.status in ['ringing', 'active', 'declined', 'ended']
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['answer'])
+          || resource.data.callee == me());
+      allow delete: if request.auth != null
+        && (resource.data.caller == me() || resource.data.callee == me());
+
+      match /candidates/{id} {
+        allow get, list: if request.auth != null && inCall(call);
+        allow create: if request.auth != null && inCall(call)
+          && request.resource.data.keys().hasOnly(['from', 'c'])
+          && request.resource.data.from == me()
+          && request.resource.data.c is string
+          && request.resource.data.c.size() < 2000;
+        allow update: if false;
+        allow delete: if request.auth != null && inCall(call);
+      }
+    }
+
+    // Push token of the phone that should be woken for this account's alerts.
+    // Only the owner writes it; only the server function reads it.
+    // Who is online, when they were last seen, and which conversation they
+    // have open. Only an accepted buddy may read it, and only the person
+    // themselves may write it. "openWith" is a username, never message text.
+    match /presence/{name} {
+      allow create, update: if request.auth != null && name == me()
+        && request.resource.data.keys().hasOnly(['online', 'at', 'openWith'])
+        && request.resource.data.online is bool;
+      allow get: if request.auth != null
+        && (name == me() || friendsOf(pairId(me(), name)));
+      allow list, delete: if false;
+    }
+
+    match /pushTokens/{name} {
+      allow create, update: if request.auth != null && name == me()
+        && request.resource.data.keys().hasOnly(['token', 'platform', 'updatedAt'])
+        && request.resource.data.token is string
+        && request.resource.data.token.size() < 400;
+      allow delete: if request.auth != null && name == me();
+      allow get, list: if false;
+    }
+
+    // Server-built Bloom filter of taken usernames; a read-only hint.
+    match /meta/{doc} {
+      allow get: if true;
+      allow list, write: if false;
     }
 
     match /{document=**} { allow read, write: if false; }

@@ -1,21 +1,22 @@
 // Firebase configuration for SafeHer.
 //
 // Hand-written from android/app/google-services.json (project safeher-cfb5a).
-// Only Android is configured right now. Web/iOS need their own Firebase app
+// Android and Web are configured. iOS needs its own Firebase app
 // registration; add them here (or regenerate this file with
 // `flutterfire configure`) before enabling Firebase on those platforms.
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, TargetPlatform;
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
 class DefaultFirebaseOptions {
   /// Whether Firebase is configured for the current platform. Callers should
   /// check this before initializing so unconfigured platforms (web/iOS) keep
   /// running in local-only mode instead of crashing at startup.
   static bool get hasPlatformOptions =>
-      defaultTargetPlatform == TargetPlatform.android;
+      kIsWeb || defaultTargetPlatform == TargetPlatform.android;
 
   static FirebaseOptions get currentPlatform {
+    if (kIsWeb) return web;
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return android;
@@ -32,6 +33,15 @@ class DefaultFirebaseOptions {
     appId: '1:794636415951:android:921c06f0389ec4d92698ba',
     messagingSenderId: '794636415951',
     projectId: 'safeher-cfb5a',
+    storageBucket: 'safeher-cfb5a.firebasestorage.app',
+  );
+
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyACvXO8RLwlLRQznArRRap2rZHpDoL87CE',
+    appId: '1:794636415951:web:3ddc3484989b4a892698ba',
+    messagingSenderId: '794636415951',
+    projectId: 'safeher-cfb5a',
+    authDomain: 'safeher-cfb5a.firebaseapp.com',
     storageBucket: 'safeher-cfb5a.firebasestorage.app',
   );
 }

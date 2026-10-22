@@ -15,6 +15,7 @@ class SlideToSos extends StatefulWidget {
     required this.onComplete,
     required this.idle,
     this.label = 'Slide to send alert',
+    this.ready = true,
   });
 
   final VoidCallback onComplete;
@@ -23,6 +24,10 @@ class SlideToSos extends StatefulWidget {
   /// returns to the start.
   final bool idle;
   final String label;
+
+  /// False until an SOS buddy has approved. The slider still works — it is
+  /// what explains the missing buddy — but it stops looking armed.
+  final bool ready;
 
   @override
   State<SlideToSos> createState() => _SlideToSosState();
@@ -77,13 +82,16 @@ class _SlideToSosState extends State<SlideToSos> {
         final duration = _dragging || reduce
             ? Duration.zero
             : const Duration(milliseconds: 480);
-        final shadow = AppColors.text;
+        final shadow = widget.ready ? AppColors.text : AppColors.border;
         return Container(
           height: 76,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(999),
             color: AppColors.surface,
-            border: Border.all(color: AppColors.text, width: 1.5),
+            border: Border.all(
+              color: widget.ready ? AppColors.text : AppColors.border,
+              width: 1.5,
+            ),
             boxShadow: [BoxShadow(color: shadow, offset: const Offset(4, 5))],
           ),
           child: ClipRRect(
@@ -111,11 +119,15 @@ class _SlideToSosState extends State<SlideToSos> {
                       child: Padding(
                         padding: const EdgeInsets.only(left: _knob),
                         child: Text(
-                          widget.label,
+                          widget.ready
+                              ? widget.label
+                              : 'Add an SOS buddy first',
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 14,
-                            color: AppColors.text,
+                            color: widget.ready
+                                ? AppColors.text
+                                : AppColors.textMuted,
                           ),
                         ),
                       ),
@@ -147,13 +159,16 @@ class _SlideToSosState extends State<SlideToSos> {
                           });
                         }
                       },
+                      // The emergency red, in either theme. In dark the brand
+                      // colour is an indigo, and a panic button must not read
+                      // as an ordinary one.
                       child: Container(
                         width: _knob,
                         height: _knob,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: AppColors.primary,
+                          color: AppColors.danger,
                         ),
                         child: const Text(
                           'SOS',
@@ -203,10 +218,16 @@ class SosSheet extends StatefulWidget {
 class _SosSheetState extends State<SosSheet> {
   EmergencyStatus _shown = EmergencyStatus.countdown;
 
+  /// A running SOS can be pushed out of the way so the rest of the app stays
+  /// reachable — someone in trouble may still need to message another buddy.
+  /// The SOS keeps running; a pill at the top brings the sheet back.
+  bool _hidden = false;
+
   @override
   void didUpdateWidget(SosSheet old) {
     super.didUpdateWidget(old);
     if (widget.status != EmergencyStatus.idle) _shown = widget.status;
+    if (widget.status != old.status) _hidden = false;
   }
 
   @override
@@ -215,8 +236,51 @@ class _SosSheetState extends State<SosSheet> {
     if (widget.status != EmergencyStatus.idle) _shown = widget.status;
   }
 
+  bool get _canHide => widget.status == EmergencyStatus.active;
+
+  /// What is left on screen once the sheet is pushed aside: a reminder that
+  /// the SOS is still running, and the way back to it.
+  Widget _pill() => Align(
+    alignment: Alignment.topCenter,
+    child: SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Pressable(
+          borderRadius: BorderRadius.circular(999),
+          onTap: () => setState(() => _hidden = false),
+          semanticLabel: 'Your SOS is live, open it',
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: const [
+                BoxShadow(color: Color(0x40351626), blurRadius: 16),
+              ],
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.sos_rounded, color: Colors.white, size: 18),
+                SizedBox(width: 8),
+                Text(
+                  'Your SOS is live · Open',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
+    if (_hidden && widget.status != EmergencyStatus.idle) return _pill();
     final open = widget.status != EmergencyStatus.idle;
     final reduce = reduceMotionOf(context);
     final slide = reduce ? Duration.zero : const Duration(milliseconds: 600);
@@ -227,12 +291,15 @@ class _SosSheetState extends State<SosSheet> {
         child: Stack(
           children: [
             Positioned.fill(
-              child: AnimatedOpacity(
-                duration: reduce
-                    ? Duration.zero
-                    : const Duration(milliseconds: 400),
-                opacity: open ? 1 : 0,
-                child: const ColoredBox(color: Color(0x80351626)),
+              child: GestureDetector(
+                onTap: _canHide ? () => setState(() => _hidden = true) : null,
+                child: AnimatedOpacity(
+                  duration: reduce
+                      ? Duration.zero
+                      : const Duration(milliseconds: 400),
+                  opacity: open ? 1 : 0,
+                  child: const ColoredBox(color: Color(0x80351626)),
+                ),
               ),
             ),
             Align(
@@ -262,15 +329,30 @@ class _SosSheetState extends State<SosSheet> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        width: 44,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: AppColors.border,
-                          borderRadius: BorderRadius.circular(99),
+                      Pressable(
+                        borderRadius: BorderRadius.circular(99),
+                        onTap: _canHide
+                            ? () => setState(() => _hidden = true)
+                            : () {},
+                        semanticLabel: _canHide
+                            ? 'Hide this, keep the SOS running'
+                            : 'SOS',
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 8,
+                          ),
+                          child: Container(
+                            width: 44,
+                            height: 5,
+                            decoration: BoxDecoration(
+                              color: AppColors.border,
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 10),
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 450),
                         switchInCurve: Curves.easeOutCubic,
@@ -293,6 +375,7 @@ class _SosSheetState extends State<SosSheet> {
                                 key: const ValueKey('active'),
                                 recipients: widget.recipients,
                                 onSafe: widget.onSafe,
+                                onHide: () => setState(() => _hidden = true),
                               ),
                       ),
                     ],
@@ -408,9 +491,18 @@ class _RingPainter extends CustomPainter {
 }
 
 class _Active extends StatelessWidget {
-  const _Active({super.key, required this.recipients, required this.onSafe});
+  const _Active({
+    super.key,
+    required this.recipients,
+    required this.onSafe,
+    required this.onHide,
+  });
   final List<String> recipients;
   final VoidCallback onSafe;
+
+  /// Steps out of the way without stopping the SOS, so the rest of the app —
+  /// messaging another buddy, for one — stays reachable.
+  final VoidCallback onHide;
 
   @override
   Widget build(BuildContext context) {
@@ -442,7 +534,10 @@ class _Active extends StatelessWidget {
         Text('SOS is active', style: theme.textTheme.headlineMedium),
         const SizedBox(height: 8),
         Text(
-          'Your live location is being tracked on this phone. It reaches your buddies once cloud delivery is switched on.',
+          recipients.isEmpty
+              ? 'Your live location is being tracked on this phone.'
+              : 'Your live location, camera and microphone are going to your '
+                    'SOS buddies right now.',
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium,
         ),
@@ -497,6 +592,22 @@ class _Active extends StatelessWidget {
                 color: AppColors.light ? const Color(0xFFFFF7F3) : AppColors.bg,
                 fontWeight: FontWeight.w800,
                 fontSize: 16,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Pressable(
+          borderRadius: BorderRadius.circular(999),
+          onTap: onHide,
+          semanticLabel: 'Use the app, keep the SOS running',
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            child: Text(
+              'Use the app · SOS keeps running',
+              style: TextStyle(
+                color: AppColors.textMuted,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),

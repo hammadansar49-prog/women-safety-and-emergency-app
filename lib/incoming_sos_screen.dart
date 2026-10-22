@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'call_controller.dart';
 import 'chat_screen.dart';
 import 'social_controller.dart';
 import 'theme/tokens.dart';
@@ -16,10 +17,14 @@ class IncomingSosScreen extends StatefulWidget {
     super.key,
     required this.social,
     required this.eventId,
+    this.calls,
   });
 
   final SocialController social;
   final String eventId;
+
+  /// Opens the sender's live camera and microphone, when they are sharing.
+  final CallController? calls;
 
   @override
   State<IncomingSosScreen> createState() => _IncomingSosScreenState();
@@ -62,6 +67,18 @@ class _IncomingSosScreenState extends State<IncomingSosScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not open the phone dialer.')),
       );
+    }
+  }
+
+  /// Opens the sender's live camera, and says so when it cannot be reached
+  /// instead of leaving the button looking broken.
+  Future<void> _watch(String streamId) async {
+    await widget.calls!.watchSos(streamId);
+    final problem = widget.calls!.error;
+    if (problem != null && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(problem)));
     }
   }
 
@@ -108,8 +125,8 @@ class _IncomingSosScreenState extends State<IncomingSosScreen>
               ),
               const SizedBox(height: 10),
               SizedBox(
-                width: 150,
-                height: 150,
+                width: 118,
+                height: 118,
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
@@ -117,8 +134,8 @@ class _IncomingSosScreenState extends State<IncomingSosScreen>
                       AnimatedBuilder(
                         animation: _ping,
                         builder: (context, _) => Container(
-                          width: 90 + 60 * _ping.value,
-                          height: 90 + 60 * _ping.value,
+                          width: 72 + 46 * _ping.value,
+                          height: 72 + 46 * _ping.value,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: AppColors.primary.withValues(
@@ -127,11 +144,11 @@ class _IncomingSosScreenState extends State<IncomingSosScreen>
                           ),
                         ),
                       ),
-                    AvatarDot(name: sender.name, size: 90),
+                    AvatarDot(name: sender.name, size: 72),
                   ],
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 2),
               Text(
                 active
                     ? '${sender.name} needs help'
@@ -187,6 +204,17 @@ class _IncomingSosScreenState extends State<IncomingSosScreen>
               ),
             ),
             const SizedBox(height: 16),
+            if (active && widget.calls != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: BerryButton(
+                  label: 'Watch live camera',
+                  icon: Icons.videocam_rounded,
+                  // On this side the event id is already the sender's event
+                  // plus this account, which is exactly the live stream's id.
+                  onTap: () => _watch(event.id),
+                ),
+              ),
             BerryButton(label: 'Call 15', onTap: _call),
             const SizedBox(height: 10),
             OutlinedPill(

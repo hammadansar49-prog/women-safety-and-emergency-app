@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -19,13 +20,26 @@ import 'theme/tokens.dart';
 import 'ui/aurora_background.dart';
 import 'ui/glass.dart';
 import 'ui/motion.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import 'ui/design.dart';
+import 'ui/sos_map_card.dart';
 import 'ui/sos_slider.dart';
 import 'profile_screen.dart';
 import 'sos_buddies_screen.dart';
 import 'permissions_screen.dart';
 import 'security_screens.dart';
 import 'onboarding_guide.dart';
+import 'alert_sounder.dart';
+import 'call_controller.dart';
+import 'call_signaling.dart';
+import 'call_screens.dart';
+import 'cloud_backup.dart';
+import 'e2e_hook.dart';
+import 'username_check.dart';
+import 'cloud_social.dart';
+import 'e2ee.dart';
+import 'backup_screens.dart';
 import 'incoming_sos_screen.dart';
 
 Future<void> main() async {
@@ -141,9 +155,14 @@ class _SafeHerAppState extends State<SafeHerApp> with WidgetsBindingObserver {
           Brightness.light,
   };
 
+  /// Owned here, above the Navigator, so a ringing or running call covers
+  /// whatever screen is open — including a chat pushed on top of the shell.
+  final calls = CallController();
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    calls.dispose();
     if (widget.social == null) social.dispose();
     super.dispose();
   }
@@ -163,10 +182,17 @@ class _SafeHerAppState extends State<SafeHerApp> with WidgetsBindingObserver {
         theme: AppTheme.build(),
         darkTheme: AppTheme.build(),
         themeMode: _useLight ? ThemeMode.light : ThemeMode.dark,
-        builder: (context, child) =>
-            AuroraBackground(child: child ?? const SizedBox.shrink()),
+        builder: (context, child) => AuroraBackground(
+          child: Stack(
+            children: [
+              child ?? const SizedBox.shrink(),
+              CallOverlay(calls: calls, social: social),
+            ],
+          ),
+        ),
         home: SafeHerShell(
           social: social,
+          calls: calls,
           vault: widget.vault,
           themeMode: themeMode,
           onThemeChanged: (mode) => social.setAppearance(mode.name),
@@ -184,12 +210,17 @@ class SafeHerShell extends StatefulWidget {
     this.onThemeChanged,
     this.auth,
     this.vault,
+    this.calls,
   });
   final LocalVault? vault;
   final AuthService? auth;
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode>? onThemeChanged;
   final SocialController? social;
+
+  /// Supplied by the app so the call overlay can live above the Navigator.
+  /// Left out in tests, where the shell makes its own.
+  final CallController? calls;
   @override
   State<SafeHerShell> createState() => _SafeHerShellState();
 }
@@ -216,9 +247,295 @@ class _SafeHerShellState extends State<SafeHerShell>
       social.signedIn && social.currentUser.username.isNotEmpty;
 
   int page = 0;
+
+  // --- Cloud backup --------------------------------------------------------
+  CloudBackup? _backup;
+  String? _backupChecked; // uid whose backup state was settled this run
+  String? _recoveryCode; // shown once, right after backup is turned on
+  bool _needsRestore = false;
+  Timer? _backupTimer;
+  CloudSocial? _cloud;
+
+  /// The app owns this so the call overlay sits above every pushed route; a
+  /// shell built on its own (tests) falls back to one of its own.
+  late final CallController calls = widget.calls ?? CallController();
+  bool get _ownsCalls => widget.calls == null;
+  final _sounder = AlertSounder();
+
+  /// SOS alerts from other people that this phone has already shouted about.
+  final _announced = <String>{};
+
+  /// An SOS from a buddy makes this phone loud: a siren plus a spoken line,
+  /// so it can be heard from a pocket. It stops when every alert has ended.
+  void _soundIncomingAlerts() {
+    final live = social.visibleEvents.where(
+      (e) =>
+          e.senderId != social.currentUserId &&
+          e.status == LocalSosStatus.active,
+    );
+    if (live.isEmpty) {
+      _announced.clear();
+      if (_sounder.isOn) _sounder.stop();
+      return;
+    }
+    final fresh = live.where((e) => !_announced.contains(e.id)).toList();
+    if (fresh.isEmpty) return;
+    for (final e in live) {
+      _announced.add(e.id);
+    }
+    _sounder.siren(social.person(fresh.first.senderId).name);
+  }
+
+  late final UsernameChecker _usernameChecker;
+
+  /// Starts friends, requests and encrypted chat for the signed-in account.
+  /// Runs only once the backup question is settled, so the chat identity that
+  /// gets published is the one the account will keep.
+  void _startCloud() {
+    final uid = _backupUid;
+    final name = social.currentUser.username;
+    if (uid == null || name.isEmpty) return;
+    _cloud ??= CloudSocial(social, onError: social.setSyncError);
+    _cloud!.start(name, uid);
+    social.onChatOpen = _cloud!.setOpenChat;
+    calls.start(name);
+  }
+
+  String? get _backupUid => _backup == null ? null : auth.uid;
+
+  /// Decides, once per sign-in, whether to turn backup on, ask for the
+  /// recovery code (the account already has a backup this phone lacks), or
+  /// simply keep the existing backup current.
+  Future<void> _settleBackup() async {
+    final uid = _backupUid;
+    final vault = widget.vault;
+    if (uid == null || vault == null || _backupChecked == uid) return;
+    _backupChecked = uid;
+    try {
+      if (vault.backupKey(uid) != null) {
+        _startCloud();
+        return;
+      }
+      if (await _backup!.exists(uid)) {
+        if (mounted) setState(() => _needsRestore = true);
+        return;
+      }
+      // The chat identity has to exist before the backup is sealed, so the
+      // backup carries it.
+      if (social.identityPriv == null) {
+        final id = await const E2ee().newIdentity();
+        social.setIdentity(id.priv, id.pub);
+      }
+      final enabled = await _backup!.enable(uid, social.snapshot());
+      await vault.setBackupKey(uid, enabled.keyB64);
+      _startCloud();
+      if (mounted) setState(() => _recoveryCode = enabled.recoveryCode);
+    } catch (_) {
+      _backupChecked = null; // offline or rules: try again next change
+    }
+  }
+
+  void _scheduleBackupSave() {
+    final uid = _backupUid;
+    final key = uid == null ? null : widget.vault?.backupKey(uid);
+    if (uid == null || key == null || social.accountKey == null) return;
+    _backupTimer?.cancel();
+    _backupTimer = Timer(const Duration(seconds: 4), () => _saveBackup());
+  }
+
+  Future<void> _saveBackup() async {
+    final uid = _backupUid;
+    final key = uid == null ? null : widget.vault?.backupKey(uid);
+    if (uid == null || key == null || social.accountKey == null) return;
+    try {
+      await _backup!.save(uid, key, social.snapshot());
+    } catch (_) {}
+  }
+
+  Future<String?> _restoreBackup(String code) async {
+    final uid = _backupUid;
+    if (uid == null) return 'Not signed in.';
+    try {
+      final restored = await _backup!.restore(uid, code);
+      final username = social.accountKey ?? '';
+      await widget.vault?.setBackupKey(uid, restored.keyB64);
+      social.enterAccount(
+        username,
+        restored.snapshot,
+        name: '',
+        username: username,
+      );
+      social.setSignedIn(true);
+      if (mounted) setState(() => _needsRestore = false);
+      _startCloud();
+      return null;
+    } on BackupFailure catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Could not reach the backup. Check your connection.';
+    }
+  }
+
+  Future<void> _startOverBackup() async {
+    final uid = _backupUid;
+    if (uid == null) return;
+    try {
+      await _backup!.reset(uid);
+      _backupChecked = null;
+      await widget.vault?.setBackupKey(uid, null);
+      if (mounted) setState(() => _needsRestore = false);
+      await _settleBackup();
+    } catch (_) {}
+  }
+
+  /// Test-only entry points for the web end-to-end build. The whole body is
+  /// dead code unless the app is compiled with SAFEHER_E2E=true.
+  Future<Object?> _e2e(String name, List<dynamic> a) async {
+    switch (name) {
+      case 'register':
+        return await _handleRegister(a[0], a[1], a[2], a[3]) ?? 'ok';
+      case 'login':
+        return await _handleLogin(a[0], a[1]) ?? 'ok';
+      case 'signOut':
+        await _signOut();
+        return social.signedIn ? 'still signed in' : 'ok';
+      case 'restore':
+        return await _restoreBackup(a[0]) ?? 'ok';
+      case 'continue':
+        // Past the recovery code and the guide.
+        final code = _recoveryCode;
+        _recoveryCode = null;
+        social.markGuideSeen();
+        if (mounted) setState(() {});
+        return code;
+      case 'search':
+        return [for (final r in await auth.searchUsers(a[0])) r.username];
+      case 'addBuddy':
+        social.adoptRemote(a[0], a[0]);
+        social.requestFriend(a[0]);
+        return 'ok';
+      case 'respond':
+        final r = social.pendingIncoming.firstWhere((r) => r.fromId == a[0]);
+        social.respondToFriendRequest(r.id, a[1] == true);
+        return 'ok';
+      case 'favorite':
+        social.favorite(a[0]);
+        return 'ok';
+      case 'sosAnswer':
+        social.respondToSosRequest(a[0], a[1] == true);
+        return 'ok';
+      case 'send':
+        social.sendMessage(a[0], a[1]);
+        return 'ok';
+      case 'sosStart':
+        return social.createSos().id;
+      case 'sosMove':
+        final id = social.visibleEvents
+            .firstWhere(
+              (e) =>
+                  e.senderId == social.currentUserId &&
+                  e.status == LocalSosStatus.active,
+            )
+            .id;
+        social.updateSosLocation(
+          id,
+          (a[0] as num).toDouble(),
+          (a[1] as num).toDouble(),
+          DateTime.now(),
+        );
+        return id;
+      case 'sosEnd':
+        final id = social.visibleEvents
+            .firstWhere(
+              (e) =>
+                  e.senderId == social.currentUserId &&
+                  e.status == LocalSosStatus.active,
+            )
+            .id;
+        social.finishSos(id, cancelled: false);
+        return id;
+      case 'callStart':
+        await calls.call(
+          a[0] as String,
+          a[1] == 'video' ? CallKind.video : CallKind.audio,
+        );
+        return calls.error ?? 'ok';
+      case 'callAccept':
+        if (calls.ringing.isEmpty) return 'nothing ringing';
+        await calls.accept(calls.ringing.first);
+        return calls.error ?? 'ok';
+      case 'callDecline':
+        if (calls.ringing.isEmpty) return 'nothing ringing';
+        await calls.decline(calls.ringing.first);
+        return 'ok';
+      case 'callEnd':
+        await calls.endCall();
+        return 'ok';
+      case 'watchSos':
+        await calls.watchSos(a[0] as String);
+        return calls.error ?? 'ok';
+      case 'callState':
+        final s = calls.active;
+        return {
+          'ringing': [
+            for (final r in calls.ringing)
+              {'id': r.id, 'from': r.caller, 'kind': r.kind.name},
+          ],
+          'active': s == null
+              ? null
+              : {
+                  'id': s.callId,
+                  'peer': s.peer,
+                  'kind': s.kind.name,
+                  'state': s.state.name,
+                  'caller': s.isCaller,
+                  'hasRemote': s.remote != null,
+                  'remoteVideo': s.remote?.getVideoTracks().isNotEmpty ?? false,
+                  'remoteAudio': s.remote?.getAudioTracks().isNotEmpty ?? false,
+                  'localVideo': s.local?.getVideoTracks().isNotEmpty ?? false,
+                },
+          'error': calls.error,
+        };
+      case 'state':
+        return {
+          'me': social.currentUser.username,
+          'name': social.currentUser.name,
+          'signedIn': social.signedIn,
+          'needsRestore': _needsRestore,
+          'recoveryCode': _recoveryCode,
+          'syncError': social.syncError,
+          'hasIdentity': social.identityPub != null,
+          'friends': [for (final f in social.friends) f.id],
+          'incoming': [for (final r in social.pendingIncoming) r.fromId],
+          'outgoing': [for (final r in social.pendingOutgoing) r.toId],
+          'sosApproved': [for (final p in social.eligibleRecipients) p.id],
+          'sosAsks': [for (final r in social.incomingSosRequests) r.senderId],
+          'chats': {
+            for (final f in social.friends)
+              f.id: [
+                for (final m in social.messagesWith(f.id))
+                  '${m.senderId == social.currentUserId ? 'me' : m.senderId}: ${m.text}',
+              ],
+          },
+          'alerts': [
+            for (final e in social.visibleEvents)
+              {
+                'id': e.id,
+                'from': e.senderId,
+                'status': e.status.name,
+                'lat': e.lastLat,
+                'lng': e.lastLng,
+              },
+          ],
+        };
+    }
+    return 'unknown call $name';
+  }
+
   @override
   void initState() {
     super.initState();
+    if (const bool.fromEnvironment('SAFEHER_E2E')) installE2eHook(_e2e);
     social = widget.social ?? SocialController(newAccount: true);
     auth =
         widget.auth ??
@@ -228,7 +545,17 @@ class _SafeHerShellState extends State<SafeHerShell>
                 saved: widget.vault?.authData,
                 onChanged: widget.vault?.saveAuthData,
               ));
+    if (Firebase.apps.isNotEmpty && auth is FirebaseAuthService) {
+      _backup = CloudBackup(FirestoreBackupStore());
+    }
+    _usernameChecker = UsernameChecker(
+      quick: auth.quickUsernameCheck,
+      confirm: auth.usernameAvailable,
+    );
+    calls.onMissedCall = (peer, {required video, required outgoing}) =>
+        social.noteMissedCall(peer, video: video, outgoing: outgoing);
     social.addListener(_syncSession);
+    social.addListener(_soundIncomingAlerts);
     WidgetsBinding.instance.addObserver(this);
     // Reopening into an account with a PIN starts locked.
     _locked = social.signedIn && social.hasPin;
@@ -348,7 +675,10 @@ class _SafeHerShellState extends State<SafeHerShell>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
       _pausedAt = DateTime.now();
+      // Buddies should see "last seen", not an account that is still online.
+      _cloud?.goAway();
     } else if (state == AppLifecycleState.resumed) {
+      _cloud?.setOpenChat(null);
       final away = _pausedAt;
       _pausedAt = null;
       if (away != null &&
@@ -371,6 +701,10 @@ class _SafeHerShellState extends State<SafeHerShell>
     final key = social.signedIn && social.currentUser.username.isNotEmpty
         ? social.accountKey
         : null;
+    if (key != null) {
+      _settleBackup();
+      _scheduleBackupSave();
+    }
     if (key == _savedSession) return;
     _savedSession = key;
     vault.setSession(key);
@@ -460,6 +794,16 @@ class _SafeHerShellState extends State<SafeHerShell>
   }
 
   Widget _storageStatus() {
+    if (social.syncError != null && social.saveError == null) {
+      return Material(
+        color: Theme.of(context).colorScheme.errorContainer,
+        child: ListTile(
+          dense: true,
+          leading: const Icon(Icons.cloud_off_outlined),
+          title: Text(social.syncError!),
+        ),
+      );
+    }
     if (social.saveError != null) {
       return Material(
         color: Theme.of(context).colorScheme.errorContainer,
@@ -500,6 +844,14 @@ class _SafeHerShellState extends State<SafeHerShell>
         }
         activeEventId = social.createSos().id;
         _startTracking(activeEventId!);
+        // Camera and microphone go to the approved buddies, alongside the
+        // location stream.
+        if (social.cloudConnected) {
+          calls.startSos(
+            activeEventId!,
+            social.eligibleRecipients.map((p) => p.id).toList(),
+          );
+        }
       } on StateError {
         emergency.cancel();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -585,6 +937,7 @@ class _SafeHerShellState extends State<SafeHerShell>
         }
       });
       social.finishSos(eventId, cancelled: cancelled);
+      calls.stopSos();
     }
     if (cancelled) {
       emergency.cancel();
@@ -598,6 +951,11 @@ class _SafeHerShellState extends State<SafeHerShell>
   @override
   void dispose() {
     social.removeListener(_syncSession);
+    social.removeListener(_soundIncomingAlerts);
+    _sounder.dispose();
+    if (_ownsCalls) calls.dispose();
+    _backupTimer?.cancel();
+    _usernameChecker.dispose();
     WidgetsBinding.instance.removeObserver(this);
     shortcut.dispose();
     emergency.dispose();
@@ -624,6 +982,7 @@ class _SafeHerShellState extends State<SafeHerShell>
           case _AuthStage.register:
             return RegisterScreen(
               onRegister: _handleRegister,
+              checker: _usernameChecker,
               onGoogle: _handleGoogle,
               onBackToLogin: () => setState(() => _stage = _AuthStage.login),
             );
@@ -635,6 +994,19 @@ class _SafeHerShellState extends State<SafeHerShell>
           key: ValueKey(social.currentUserId),
           social: social,
           onReserve: auth.reserveUsername,
+          checker: _usernameChecker,
+        );
+      }
+      if (_needsRestore) {
+        return RestoreBackupScreen(
+          onRestore: _restoreBackup,
+          onStartOver: _startOverBackup,
+        );
+      }
+      if (_recoveryCode != null) {
+        return RecoveryCodeScreen(
+          code: _recoveryCode!,
+          onDone: () => setState(() => _recoveryCode = null),
         );
       }
       if (!social.guideSeen) {
@@ -656,24 +1028,38 @@ class _SafeHerShellState extends State<SafeHerShell>
                       e.status == LocalSosStatus.active,
                 ))
                   Material(
-                    color: Theme.of(context).colorScheme.errorContainer,
+                    color: AppColors.danger,
                     child: SafeArea(
                       bottom: false,
                       child: ListTile(
-                        leading: Icon(Icons.sos, color: AppColors.danger),
+                        textColor: Colors.white,
+                        iconColor: Colors.white,
+                        leading: const Icon(Icons.sos),
                         title: Text(
                           'SOS from ${social.person(event.senderId).name}',
                         ),
-                        subtitle: const Text(
-                          'Location unavailable. Connection required.',
+                        subtitle: Text(
+                          event.lastLat == null
+                              ? 'Waiting for their location…'
+                              : 'Live location available',
                         ),
                         trailing: TextButton(
-                          onPressed: () => Navigator.of(context).push(
-                            SafeRoute<void>(
-                              builder: (_) => IncomingSosScreen(
-                                social: social,
-                                eventId: event.id,
+                          onPressed: () {
+                            _sounder.stop();
+                            Navigator.of(context).push(
+                              SafeRoute<void>(
+                                builder: (_) => IncomingSosScreen(
+                                  social: social,
+                                  eventId: event.id,
+                                  calls: calls,
+                                ),
                               ),
+                            );
+                          },
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            textStyle: const TextStyle(
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                           child: const Text('View'),
@@ -694,6 +1080,7 @@ class _SafeHerShellState extends State<SafeHerShell>
                         1 => ContactsScreen(
                           key: ValueKey(social.currentUserId),
                           social: social,
+                          calls: calls,
                           safetyBannerBuilder: _routeSosBanner,
                           searchRemote: auth.searchUsers,
                         ),
@@ -720,6 +1107,9 @@ class _SafeHerShellState extends State<SafeHerShell>
             onCancel: () => _finishSos(cancelled: true),
             onSafe: () => _finishSos(cancelled: false),
           ),
+          // The app draws the call overlay above the Navigator; a shell on
+          // its own (tests) still needs one here.
+          if (_ownsCalls) CallOverlay(calls: calls, social: social),
           if (_locked)
             PinLockScreen(
               social: social,
@@ -760,11 +1150,31 @@ class _SafeHerShellState extends State<SafeHerShell>
   Future<void> _signOut() async {
     try {
       await social.flush();
+      _backupTimer?.cancel();
+      // Last backup and cloud shutdown must not be able to trap the person
+      // inside the app if the network is slow.
+      await _saveBackup().timeout(const Duration(seconds: 6), onTimeout: () {});
+      await _cloud?.stop().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () {},
+      );
+      await calls.stop().timeout(const Duration(seconds: 3), onTimeout: () {});
+      await _sounder.stop();
+      _announced.clear();
+      social.setSyncError(null);
       shortcut.enable(false);
       await auth.signOut();
+      _backupChecked = null;
+      _recoveryCode = null;
+      _needsRestore = false;
       social.signOut();
       await social.flush();
-    } catch (_) {
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not sign out: $e')));
+      }
       return;
     }
     if (!mounted) return;
@@ -866,33 +1276,48 @@ class _SafeHerShellState extends State<SafeHerShell>
       headerHeight: 300,
       overlap: 38,
       lavenderTop: 150,
+      // The headline shrinks rather than spilling out of the header when the
+      // device text size is large or the screen is short.
       header: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [const Wordmark(), _avatarButton()],
           ),
           const SizedBox(height: 22),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 290),
-            child: Text(
-              'Walk tall. Your circle is awake.',
-              style: theme.textTheme.headlineLarge?.copyWith(
-                fontSize: 34,
-                height: 1.08,
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.topLeft,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 290),
+                child: Text(
+                  'Walk tall. Your circle is awake.',
+                  style: theme.textTheme.headlineLarge?.copyWith(
+                    fontSize: 34,
+                    height: 1.08,
+                  ),
+                ),
               ),
             ),
           ),
           const SizedBox(height: 10),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 270),
-            child: Text(
-              'One slide tells your trusted buddies where you are.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: AppColors.light
-                    ? const Color(0xFF6A3A52)
-                    : AppColors.textMuted,
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.topLeft,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 270),
+                child: Text(
+                  'One slide tells your trusted buddies where you are.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: AppColors.light
+                        ? const Color(0xFF6A3A52)
+                        : AppColors.textMuted,
+                  ),
+                ),
               ),
             ),
           ),
@@ -901,6 +1326,7 @@ class _SafeHerShellState extends State<SafeHerShell>
       children: [
         SlideToSos(
           idle: emergency.status == EmergencyStatus.idle,
+          ready: social.eligibleRecipients.isNotEmpty,
           onComplete: _startSos,
         ),
         const SizedBox(height: 26),
@@ -1152,15 +1578,35 @@ class _SafeHerShellState extends State<SafeHerShell>
         ),
         const SizedBox(height: 14),
         for (final event in events)
-          RowCard(
-            leading: const IconChip(Icons.shield_outlined),
-            title:
-                '${social.person(event.senderId).name} · ${event.status.name}',
-            detail:
-                '${event.createdAt.toLocal().toString().substring(0, 16)} · ${event.recipientIds.map((id) => social.person(id).name).join(', ')}',
-            trailing: event.lastLat == null
-                ? null
-                : Icon(Icons.place_rounded, color: AppColors.accent, size: 20),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            // An SOS that reached a place gets the map; one cancelled in the
+            // countdown never had a location, so it stays a plain row.
+            child: event.lastLat == null
+                ? RowCard(
+                    leading: const IconChip(Icons.shield_outlined),
+                    title: _sosTitle(event),
+                    detail: _sosDetail(event),
+                  )
+                : SosMapCard(
+                    title: event.status == LocalSosStatus.active
+                        ? _sosTitle(event)
+                        : 'SOS ended here',
+                    detail: _sosDetail(event),
+                    badge: switch (event.status) {
+                      LocalSosStatus.active => 'Live',
+                      LocalSosStatus.cancelled => 'Cancelled',
+                      LocalSosStatus.resolved => 'Resolved',
+                    },
+                    resolved: event.status == LocalSosStatus.resolved,
+                    onTap: () => launchUrl(
+                      Uri.parse(
+                        'https://www.google.com/maps/search/?api=1&query='
+                        '${event.lastLat},${event.lastLng}',
+                      ),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                  ),
           ),
         if (events.isEmpty)
           RowCard(
@@ -1168,10 +1614,49 @@ class _SafeHerShellState extends State<SafeHerShell>
             title: 'A fresh start',
             detail: 'Your SOS activity will appear here.',
           ),
-        const SizedBox(height: 8),
-        _note('History is not synced to an account yet.'),
       ],
     );
+  }
+
+  /// "You raised an SOS" reads better than your own username echoed back.
+  String _sosTitle(LocalSosEvent e) => e.senderId == social.currentUserId
+      ? 'Your SOS'
+      : '${social.person(e.senderId).name} raised an SOS';
+
+  String _sosDetail(LocalSosEvent e) {
+    final when = _whenLabel(e.createdAt.toLocal());
+    final parts = <String>[when];
+    final ended = e.endedAt;
+    if (ended != null) {
+      final mins = ended.difference(e.createdAt).inMinutes;
+      parts.add(mins < 1 ? 'under a minute' : '$mins min');
+    }
+    if (e.status == LocalSosStatus.cancelled) {
+      parts.add('cancelled in countdown');
+    } else if (e.recipientIds.isNotEmpty) {
+      final n = e.recipientIds.length;
+      parts.add('shared with $n ${n == 1 ? 'buddy' : 'buddies'}');
+    }
+    return parts.join(' · ');
+  }
+
+  /// "Today, 8:12 pm", "Yesterday, 6:40 pm", else "Mon, 5:02 pm".
+  String _whenLabel(DateTime t) {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final now = DateTime.now();
+    final sameDay =
+        t.year == now.year && t.month == now.month && t.day == now.day;
+    final y = now.subtract(const Duration(days: 1));
+    final yesterday = t.year == y.year && t.month == y.month && t.day == y.day;
+    final hour = t.hour % 12 == 0 ? 12 : t.hour % 12;
+    final clock =
+        '$hour:${t.minute.toString().padLeft(2, '0')} ${t.hour < 12 ? 'am' : 'pm'}';
+    final day = sameDay
+        ? 'Today'
+        : yesterday
+        ? 'Yesterday'
+        : days[t.weekday - 1];
+    return '$day, $clock';
   }
 
   // --- Settings ------------------------------------------------------------
@@ -1302,7 +1787,8 @@ class _SafeHerShellState extends State<SafeHerShell>
         ),
         const SizedBox(height: 6),
         _note(
-          'Messages and alerts are not delivered to other devices yet. Calling is unavailable.',
+          'Chats are end-to-end encrypted. SOS alerts, your live location, and '
+              'voice and video calls go straight to your approved buddies.',
         ),
       ],
     );
@@ -1406,56 +1892,60 @@ class _NavBar extends StatelessWidget {
               opacity: AppColors.light ? 1 : 0.70,
               child: SizedBox(
                 height: 72,
+                // Each tab takes an equal share, so four of them still fit on
+                // a narrow phone or at a large text size.
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     for (var i = 0; i < _items.length; i++)
-                      Pressable(
-                        borderRadius: BorderRadius.circular(18),
-                        onTap: () => onSelected(i),
-                        semanticLabel: _items[i].label,
-                        hoverLift: 1,
-                        child: AnimatedContainer(
-                          duration: Motion.standard,
-                          curve: Motion.enter,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 18,
-                            vertical: 9,
-                          ),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(18),
-                            color: selectedIndex == i
-                                ? (AppColors.light
-                                      ? AppColors.header
-                                      : AppColors.primary.withValues(
-                                          alpha: 0.28,
-                                        ))
-                                : Colors.transparent,
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              CustomPaint(
-                                size: const Size(22, 22),
-                                painter: _NavGlyph(
-                                  _items[i].glyph,
-                                  selectedIndex == i
-                                      ? AppColors.onHeader
-                                      : idle,
+                      Expanded(
+                        child: Pressable(
+                          borderRadius: BorderRadius.circular(18),
+                          onTap: () => onSelected(i),
+                          semanticLabel: _items[i].label,
+                          hoverLift: 1,
+                          child: AnimatedContainer(
+                            duration: Motion.standard,
+                            curve: Motion.enter,
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            padding: const EdgeInsets.symmetric(vertical: 9),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(18),
+                              color: selectedIndex == i
+                                  ? (AppColors.light
+                                        ? AppColors.header
+                                        : AppColors.primary.withValues(
+                                            alpha: 0.28,
+                                          ))
+                                  : Colors.transparent,
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CustomPaint(
+                                  size: const Size(22, 22),
+                                  painter: _NavGlyph(
+                                    _items[i].glyph,
+                                    selectedIndex == i
+                                        ? AppColors.onHeader
+                                        : idle,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _items[i].label,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: selectedIndex == i
-                                      ? AppColors.onHeader
-                                      : idle,
+                                const SizedBox(height: 4),
+                                Text(
+                                  _items[i].label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: selectedIndex == i
+                                        ? AppColors.onHeader
+                                        : idle,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),

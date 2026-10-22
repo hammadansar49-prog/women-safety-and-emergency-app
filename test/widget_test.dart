@@ -1,162 +1,66 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:safeher/main.dart';
 import 'package:safeher/social_controller.dart';
 
-SocialController readyCircle() {
-  final social = SocialController();
-  social.requestFriend('ayesha');
-  social.switchProfile('ayesha');
-  social.respondToFriendRequest(social.pendingIncoming.single.id, true);
-  social.switchProfile('hammad');
-  social.favorite('ayesha');
-  social.switchProfile('ayesha');
-  social.respondToSosRequest('hammad', true);
-  social.switchProfile('hammad');
-  return social;
+/// The headers drift for ever, so a settle would never finish.
+Future<void> settle(WidgetTester tester, [int times = 1]) async {
+  for (var i = 0; i < times; i++) {
+    await tester.pump(const Duration(milliseconds: 600));
+  }
+}
+
+/// Signs a new account up the way a person would, then walks the one-time
+/// guide, so the test ends on Home.
+Future<void> signUp(WidgetTester tester, {required String username}) async {
+  await tester.tap(find.text('Create account'));
+  await settle(tester);
+  final fields = find.byType(TextField);
+  await tester.enterText(fields.at(0), 'Hammad Tester');
+  await tester.enterText(fields.at(1), '$username@example.com');
+  await tester.enterText(fields.at(2), username);
+  await tester.enterText(fields.at(3), 'Secret-12345');
+  await settle(tester);
+  await tester.tap(find.text('Create account').last);
+  await settle(tester, 6);
+  // The guide: two Next steps, then it hands over.
+  for (var i = 0; i < 2; i++) {
+    await tester.tap(find.text('Next'));
+    await settle(tester, 2);
+  }
+  await tester.tap(find.text('Get started'));
+  await settle(tester, 3);
 }
 
 void main() {
-  testWidgets('onboarding opens the product interface without demo branding', (
+  testWidgets('a fresh install opens on sign in, with a way to join', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(420, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(const SafeHerApp());
-    expect(find.text('Get started'), findsOneWidget);
-    await tester.ensureVisible(find.text('Get started'));
-    await tester.pump();
-    await tester.tap(find.text('Get started'));
-    await tester.pumpAndSettle();
-    expect(find.text('Choose your username'), findsOneWidget);
-    await tester.enterText(find.byType(TextFormField), 'AYESHA');
-    await tester.ensureVisible(find.text('Save username'));
-    await tester.tap(find.text('Save username'));
-    await tester.pumpAndSettle();
-    expect(
-      find.text('This username is already taken. Try another.'),
-      findsOneWidget,
-    );
-    await tester.enterText(find.byType(TextFormField), 'meethamad');
-    await tester.ensureVisible(find.text('Save username'));
-    await tester.tap(find.text('Save username'));
-    await tester.pumpAndSettle();
-    expect(find.text('SafeHer'), findsOneWidget);
-    expect(find.text('Demo mode'), findsNothing);
-    await tester.tap(find.byIcon(Icons.settings_outlined));
-    await tester.pumpAndSettle();
-    expect(find.text('Connection unavailable'), findsOneWidget);
+    await settle(tester);
+    expect(find.text('Sign in'), findsWidgets);
+    expect(find.text('Create account'), findsWidgets);
   });
 
-  testWidgets(
-    'selected countdown activates automatically and resolves to history',
-    (tester) async {
-      final social = readyCircle();
-      addTearDown(social.dispose);
-      await tester.pumpWidget(SafeHerApp(social: social));
-      await tester.ensureVisible(find.text('Get started'));
-      await tester.pump();
-      await tester.tap(find.text('Get started'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.settings_outlined));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('3 sec'));
-      await tester.tap(find.byIcon(Icons.shield_outlined));
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('START SOS'));
-      await tester.pump();
-      await tester.tap(find.text('START SOS'));
-      await tester.pump();
-      expect(find.text('SOS starts in 3 seconds'), findsOneWidget);
-      await tester.pump(const Duration(seconds: 3));
-      expect(find.text('SOS ACTIVE'), findsOneWidget);
-      await tester.ensureVisible(find.text('I am safe'));
-      await tester.pump();
-      await tester.tap(find.text('I am safe'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.history));
-      await tester.pumpAndSettle();
-      expect(find.text('Hammad · resolved'), findsOneWidget);
-    },
-  );
-
-  testWidgets('cancelled countdown stays idle after its original deadline', (
+  testWidgets('signing up reaches the SOS slider, which says it is not armed', (
     tester,
   ) async {
-    final social = readyCircle();
-    addTearDown(social.dispose);
-    await tester.pumpWidget(SafeHerApp(social: social));
-    await tester.ensureVisible(find.text('Get started'));
-    await tester.pump();
-    await tester.tap(find.text('Get started'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('START SOS'));
-    await tester.pump();
-    await tester.tap(find.text('START SOS'));
-    await tester.pump();
-    await tester.ensureVisible(find.text('Cancel countdown'));
-    await tester.pump();
-    await tester.tap(find.text('Cancel countdown'));
-    await tester.pump(const Duration(seconds: 6));
-    expect(find.text('SOS ACTIVE'), findsNothing);
-    await tester.drag(find.byType(ListView).first, const Offset(0, 400));
-    await tester.pumpAndSettle();
-    expect(find.text('START SOS'), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.history));
-    await tester.pumpAndSettle();
-    expect(social.visibleEvents, isEmpty);
-    expect(find.text('A fresh start'), findsOneWidget);
-  });
-
-  testWidgets('SOS appears only for favorite recipient and keeps its sender', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(900, 1100));
+    await tester.binding.setSurfaceSize(const Size(420, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final social = readyCircle();
+    final social = SocialController();
     addTearDown(social.dispose);
+
     await tester.pumpWidget(SafeHerApp(social: social));
-    await tester.tap(find.text('Get started'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('START SOS'));
-    await tester.pump(const Duration(seconds: 5));
-    social.switchProfile('ayesha');
-    await tester.pumpAndSettle();
-    expect(find.text('SOS from Hammad'), findsOneWidget);
-    expect(find.text('I am safe'), findsNothing);
-    social.switchProfile('sara');
-    await tester.pumpAndSettle();
-    expect(find.text('SOS from Hammad'), findsNothing);
-    social.switchProfile('hammad');
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('I am safe'));
-    await tester.pump();
-    await tester.tap(find.text('I am safe'));
-    await tester.pumpAndSettle();
-    expect(social.visibleEvents.single.status, LocalSosStatus.resolved);
+    await settle(tester);
+    await signUp(tester, username: 'hammadq');
+
+    expect(social.signedIn, isTrue);
+    expect(social.eligibleRecipients, isEmpty);
+    // Nobody has approved yet, so the slider must not look ready to fire.
+    expect(find.text('Add an SOS buddy first'), findsOneWidget);
+    expect(find.text('Slide to send alert'), findsNothing);
   });
 
-  testWidgets('countdown can be cancelled inside a friend chat', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(900, 1100));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final social = readyCircle();
-    addTearDown(social.dispose);
-    await tester.pumpWidget(SafeHerApp(social: social));
-    await tester.tap(find.text('Get started'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('START SOS'));
-    await tester.pump();
-    await tester.tap(find.byIcon(Icons.people_outline).last);
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const ValueKey('friend-ayesha')));
-    await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('friend-ayesha')));
-    await tester.pumpAndSettle();
-    expect(find.text('Write a message'), findsOneWidget);
-    expect(find.text('Cancel SOS'), findsOneWidget);
-    await tester.tap(find.text('Cancel SOS'));
-    await tester.pump(const Duration(seconds: 6));
-    expect(social.visibleEvents, isEmpty);
-    expect(find.text('Cancel SOS'), findsNothing);
-  });
 }
