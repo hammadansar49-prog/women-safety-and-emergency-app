@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'e2ee.dart';
 import 'push_service.dart';
+import 'receipt_writer.dart';
 import 'social_controller.dart';
 
 typedef _Row = ({String from, String to, String status});
@@ -41,12 +42,15 @@ class CloudSocial {
       social.currentUser.username == me;
   final _subs = <void Function()>[];
   final _chatSubs = <String, void Function()>{};
+  final _profileSubs = <String, void Function()>{};
+  final _chatSnapshots = <String, QuerySnapshot<Map<String, dynamic>>>{};
   int _graphGen = 0;
   final _peers = <String, ({String name, String pub})>{};
 
   /// Profile fetches already running, so a second caller waits for the same
   /// answer instead of being told the key is missing.
   final _inFlight = <String, Future<void>>{};
+  final _receipts = ReceiptWriter();
 
   List<_Row>? _reqFrom, _reqTo, _linkFrom, _linkTo;
 
@@ -68,8 +72,25 @@ class CloudSocial {
     social.onCloudOp = (op) {
       if (_isCurrent(me, generation)) _onOp(op);
     };
+    // Local key generation is fast; uploading it must never hold every
+    // incoming request/message listener behind a network write.
+    if (social.identityPriv == null) {
+      final id = await e2ee.newIdentity();
+      if (!_isCurrent(me, generation)) return;
+      social.setIdentity(id.priv, id.pub);
+    }
+    _openWith = social.openChat;
+    social.onChatOpen = setOpenChat;
+    social.onTyping = setTyping;
+    _listen();
+    _startPresence();
+    _push.register(me).catchError((Object _) {});
     try {
-      await _publishIdentity(me, uid, generation);
+      await _publishIdentity(
+        me,
+        uid,
+        generation,
+      ).timeout(const Duration(seconds: 10));
     } catch (_) {
       if (_isCurrent(me, generation)) {
         onError?.call(
@@ -78,10 +99,6 @@ class CloudSocial {
       }
     }
     if (!_isCurrent(me, generation)) return;
-    _listen();
-    _startPresence();
-    // Wake this phone for an SOS even when the app is closed. Best effort.
-    _push.register(me).catchError((Object _) {});
   }
 
   // --- Who is around --------------------------------------------------------
@@ -90,26 +107,73 @@ class CloudSocial {
   /// dot that says "they are reading this".
   String? _openWith;
   Timer? _beat;
+  Timer? _presenceExpiry;
+  Timer? _typingTimer;
+  bool _foreground = true;
+  bool _typing = false;
+  DateTime? _typingPublished;
   final _presenceSubs = <String, void Function()>{};
 
   void _startPresence() {
+    _foreground = true;
+    _beat?.cancel();
     _writePresence(online: true);
     // A heartbeat, so a phone that dies does not look online for ever.
-    _beat = Timer.periodic(
-      const Duration(seconds: 25),
-      (_) => _writePresence(online: true),
+    _beat = Timer.periodic(const Duration(seconds: 25), (_) {
+      if (_foreground) _writePresence(online: true);
+    });
+    _presenceExpiry?.cancel();
+    _presenceExpiry = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => social.expirePresence(DateTime.now()),
     );
   }
 
   /// Called as a chat opens and closes.
   void setOpenChat(String? peer) {
+    if (_openWith != peer) setTyping(false);
     _openWith = peer;
+    _writePresence(online: _foreground);
+    if (_foreground && peer != null) markRead(peer);
+  }
+
+  void setTyping(bool typing) {
+    _typingTimer?.cancel();
+    final next = typing && _foreground && _openWith != null;
+    final now = DateTime.now();
+    final publish =
+        next != _typing ||
+        (next &&
+            (_typingPublished == null ||
+                now.difference(_typingPublished!) >=
+                    const Duration(seconds: 1)));
+    _typing = next;
+    if (publish) {
+      _typingPublished = now;
+      _writePresence(online: _foreground);
+    }
+    if (next) {
+      _typingTimer = Timer(const Duration(seconds: 3), () => setTyping(false));
+    }
+  }
+
+  void resume() {
+    _foreground = true;
+    // A deliberate reconnect can retry a failed receipt; repeated snapshots
+    // during an outage must not become an unbounded write loop.
+    _receipts.clear();
     _writePresence(online: true);
-    if (peer != null) markRead(peer);
+    if (_openWith != null) markRead(_openWith!);
   }
 
   /// Called when the app goes to the background or signs out.
-  Future<void> goAway() => _writePresence(online: false);
+  Future<void> goAway() {
+    _foreground = false;
+    _typing = false;
+    _receipts.clear();
+    _typingTimer?.cancel();
+    return _writePresence(online: false);
+  }
 
   Future<void> _writePresence({required bool online}) async {
     final me = _me;
@@ -118,6 +182,7 @@ class CloudSocial {
       await _db.collection('presence').doc(me).set({
         'online': online,
         'at': FieldValue.serverTimestamp(),
+        'typing': online && _typing,
         if (online && _openWith != null) 'openWith': _openWith,
       });
     } catch (_) {
@@ -147,6 +212,7 @@ class CloudSocial {
               online: (data?['online'] as bool? ?? false) && fresh,
               lastSeen: at,
               openWith: data?['openWith'] as String?,
+              typing: fresh && (data?['typing'] as bool? ?? false),
             ),
           );
         },
@@ -165,8 +231,14 @@ class CloudSocial {
     final away = goAway();
     _me = null;
     social.onCloudOp = null;
+    social.onChatOpen = null;
+    social.onTyping = null;
+    _typingTimer?.cancel();
+    _typing = false;
     _beat?.cancel();
     _beat = null;
+    _presenceExpiry?.cancel();
+    _presenceExpiry = null;
     for (final cancel in _presenceSubs.values) {
       cancel();
     }
@@ -180,12 +252,22 @@ class CloudSocial {
       cancel();
     }
     _chatSubs.clear();
+    for (final cancel in _profileSubs.values) {
+      cancel();
+    }
+    _profileSubs.clear();
+    _chatSnapshots.clear();
     _peers.clear();
     _sosOut.clear();
     _sosLastLoc.clear();
     _inFlight.clear();
     _reqFrom = _reqTo = _linkFrom = _linkTo = null;
-    await Future.wait([away, _push.unregister()]);
+    // Offline Firestore writes can wait indefinitely. Local cancellation
+    // already completed above; do not hold the next account behind cleanup.
+    await Future.wait<void>([
+      away,
+      _push.unregister(),
+    ]).timeout(const Duration(seconds: 2), onTimeout: () => <void>[]);
   }
 
   // --- Identity -------------------------------------------------------------
@@ -292,7 +374,7 @@ class CloudSocial {
             .where('recipient', isEqualTo: me)
             .orderBy('createdAt', descending: true)
             .limit(20)
-            .snapshots(),
+            .snapshots(includeMetadataChanges: true),
         (s) => social.applyCloudAlerts([
           for (final d in s.docs)
             (
@@ -315,7 +397,7 @@ class CloudSocial {
     );
   }
 
-  Future<void> _applyGraph() async {
+  Future<void> _applyGraph({bool fetchProfiles = true}) async {
     final me = _me;
     if (me == null) return;
     final generation = _sessionGeneration;
@@ -327,18 +409,13 @@ class CloudSocial {
       for (final r in [...?_reqFrom, ...?_reqTo]) ...[r.from, r.to],
       for (final l in [...?_linkFrom, ...?_linkTo]) ...[l.from, l.to],
     }..remove(me);
-    await Future.wait(
-      snapshotUsers.where((u) => !_peers.containsKey(u)).map(_fetchPeer),
-    );
-    if (!_isCurrent(me, generation) || gen != _graphGen) return;
-    if (_reqFrom == null ||
-        _reqTo == null ||
-        _linkFrom == null ||
-        _linkTo == null) {
+    if (_reqFrom == null || _reqTo == null) {
       return;
     }
     final reqs = [..._reqFrom!, ..._reqTo!];
-    final links = [..._linkFrom!, ..._linkTo!];
+    final links = _linkFrom != null && _linkTo != null
+        ? [..._linkFrom!, ..._linkTo!]
+        : null;
     social.applyCloudGraph(
       mine: me,
       reqs: reqs,
@@ -351,6 +428,14 @@ class CloudSocial {
     ];
     _watchChats(me, friends);
     _watchPresence(friends.toSet());
+    if (fetchProfiles) {
+      await Future.wait(
+        snapshotUsers.where((u) => !_peers.containsKey(u)).map(_fetchPeer),
+      );
+      if (_isCurrent(me, generation) && gen == _graphGen) {
+        _applyGraph(fetchProfiles: false);
+      }
+    }
   }
 
   Future<void> _fetchPeer(String username) {
@@ -380,14 +465,35 @@ class CloudSocial {
   void _watchChats(String me, List<String> friends) {
     for (final f in friends) {
       if (_chatSubs.containsKey(f)) continue;
+      _profileSubs[f] = _listenRetrying(
+        () => _db.collection('profiles').doc(f).snapshots(),
+        (DocumentSnapshot<Map<String, dynamic>> doc) {
+          final data = doc.data();
+          if (data == null) return;
+          final oldPub = _peers[f]?.pub;
+          _peers[f] = (
+            name: (data['name'] as String?) ?? f,
+            pub: (data['pub'] as String?) ?? '',
+          );
+          final cached = _chatSnapshots[f];
+          if (_peers[f]!.pub.isNotEmpty &&
+              oldPub != _peers[f]!.pub &&
+              cached != null) {
+            _receive(me, f, cached);
+          }
+        },
+      );
       _chatSubs[f] = _listenRetrying(
         () => _db
             .collection('chats')
             .doc(pairId(me, f))
             .collection('messages')
             .orderBy('createdAt')
-            .snapshots(),
-        (s) => _receive(me, f, s),
+            .snapshots(includeMetadataChanges: true),
+        (s) {
+          _chatSnapshots[f] = s;
+          _receive(me, f, s);
+        },
         // Retries only while they are still friends.
         keep: () => _chatSubs.containsKey(f),
       );
@@ -395,6 +501,8 @@ class CloudSocial {
     for (final gone
         in _chatSubs.keys.where((k) => !friends.contains(k)).toList()) {
       _chatSubs.remove(gone)?.call();
+      _profileSubs.remove(gone)?.call();
+      _chatSnapshots.remove(gone);
     }
   }
 
@@ -411,7 +519,7 @@ class CloudSocial {
     if (!_isCurrent(me, generation)) return;
     final pub = _peers[friend]?.pub ?? '';
     if (pub.isEmpty) return;
-    final known = social.messageIds;
+    final known = social.loadedMessageIds;
     final incoming = <ChatMessage>[];
     for (final d in snap.docs) {
       if (!_isCurrent(me, generation)) return;
@@ -425,37 +533,54 @@ class CloudSocial {
           read: (data['readAt'] as Timestamp?)?.toDate(),
         );
       } else {
-        _stamp(d.reference, data, reading: _openWith == friend);
+        if (known.contains(d.id) && !d.metadata.hasPendingWrites) {
+          _stamp(
+            d.reference,
+            data,
+            reading: _foreground && _openWith == friend,
+          );
+        }
       }
       if (known.contains(d.id)) continue;
       final mine = from == me;
       final at = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
       final sealedVoice = data['voice'] as String?;
+      final sealedPhoto = data['photo'] as String?;
 
-      if (sealedVoice != null) {
+      if (sealedVoice != null || sealedPhoto != null) {
         Uint8List? audio;
         try {
           audio = await e2ee.decryptBytes(
             myPriv: priv,
             theirPub: pub,
             pair: pairId(me, friend),
-            sealed: sealedVoice,
+            sealed: sealedVoice ?? sealedPhoto!,
           );
         } on DecryptFailure {
           audio = null;
         }
         if (!_isCurrent(me, generation)) return;
+        if (!mine && audio != null) {
+          _stamp(
+            d.reference,
+            data,
+            reading: _foreground && _openWith == friend,
+          );
+        }
         incoming.add(
           ChatMessage(
             id: d.id,
             senderId: mine ? social.currentUserId : friend,
             recipientId: mine ? friend : social.currentUserId,
             text: audio == null
-                ? 'This voice note could not be unlocked on this device.'
+                ? 'This attachment could not be unlocked on this device.'
                 : '',
             createdAt: at,
-            kind: audio == null ? MessageKind.text : MessageKind.voice,
-            audio: audio,
+            kind: audio == null
+                ? MessageKind.text
+                : (sealedPhoto != null ? MessageKind.photo : MessageKind.voice),
+            audio: sealedPhoto == null ? audio : null,
+            photo: sealedPhoto == null ? null : audio,
             seconds: (data['secs'] as num?)?.toInt() ?? 0,
           ),
         );
@@ -463,6 +588,7 @@ class CloudSocial {
       }
 
       String text;
+      var unlocked = true;
       try {
         text = await e2ee.decrypt(
           myPriv: priv,
@@ -471,9 +597,13 @@ class CloudSocial {
           sealed: data['ct'] as String,
         );
       } on DecryptFailure {
+        unlocked = false;
         text = 'This message could not be unlocked on this device.';
       }
       if (!_isCurrent(me, generation)) return;
+      if (!mine && unlocked) {
+        _stamp(d.reference, data, reading: _foreground && _openWith == friend);
+      }
       incoming.add(
         ChatMessage(
           id: d.id,
@@ -494,24 +624,23 @@ class CloudSocial {
     Map<String, dynamic> data, {
     required bool reading,
   }) {
-    final needsDelivered = data['deliveredAt'] == null;
-    final needsRead = reading && data['readAt'] == null;
-    if (!needsDelivered && !needsRead) return;
-    ref
-        .update({
-          if (needsDelivered) 'deliveredAt': FieldValue.serverTimestamp(),
-          if (needsRead) 'readAt': FieldValue.serverTimestamp(),
-        })
-        .catchError((Object _) {
-          // A receipt that cannot be written is not worth telling anyone about.
-        });
+    _receipts.stamp(
+      ref.path,
+      delivered: data['deliveredAt'] != null,
+      read: data['readAt'] != null,
+      reading: reading,
+      write: ({required bool delivered, required bool read}) => ref.update({
+        if (delivered) 'deliveredAt': FieldValue.serverTimestamp(),
+        if (read) 'readAt': FieldValue.serverTimestamp(),
+      }),
+    );
   }
 
   /// Re-stamps everything in the open conversation as read, for messages that
   /// arrived before it was opened.
   Future<void> markRead(String friend) async {
     final me = _me;
-    if (me == null) return;
+    if (me == null || !_foreground || _openWith != friend) return;
     final generation = _sessionGeneration;
     try {
       final snap = await _db
@@ -520,9 +649,14 @@ class CloudSocial {
           .collection('messages')
           .where('to', isEqualTo: me)
           .get();
-      if (!_isCurrent(me, generation)) return;
+      if (!_isCurrent(me, generation) || !_foreground || _openWith != friend) {
+        return;
+      }
+      final loaded = social.loadedMessageIds;
       for (final d in snap.docs) {
-        _stamp(d.reference, d.data(), reading: true);
+        if (loaded.contains(d.id) && !d.metadata.hasPendingWrites) {
+          _stamp(d.reference, d.data(), reading: true);
+        }
       }
     } catch (_) {}
   }
@@ -536,7 +670,9 @@ class CloudSocial {
     _write(me, op).catchError((Object e) {
       if (!_isCurrent(me, generation)) return;
       onError?.call(
-        e is FirebaseException && e.code == 'permission-denied'
+        e is FirebaseException && e.code == 'resource-exhausted'
+            ? 'SafeHer has reached its service limit. Messages and alerts may be delayed.'
+            : e is FirebaseException && e.code == 'permission-denied'
             ? 'That was not allowed.'
             : 'Could not reach SafeHer. Try again when you are online.',
       );
@@ -590,6 +726,8 @@ class CloudSocial {
       case 'message':
         await _sendMessage(me, op);
       case 'voice':
+        await _sendVoice(me, op);
+      case 'photo':
         await _sendVoice(me, op);
     }
   }
@@ -720,7 +858,7 @@ class CloudSocial {
       myPriv: priv,
       theirPub: pub,
       pair: pairId(me, peer),
-      bytes: op.audio!,
+      bytes: op.photo ?? op.audio!,
     );
     if (!_isCurrent(me, generation)) return;
     await _db
@@ -731,8 +869,8 @@ class CloudSocial {
         .set({
           'from': me,
           'to': peer,
-          'voice': sealed,
-          'secs': op.seconds,
+          if (op.kind == 'photo') 'photo': sealed else 'voice': sealed,
+          if (op.kind != 'photo') 'secs': op.seconds,
           'createdAt': FieldValue.serverTimestamp(),
         });
   }

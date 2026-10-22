@@ -213,11 +213,10 @@ class _ChatComposerState extends State<ChatComposer> {
               Expanded(
                 child: SizedBox(
                   height: 34,
-                  child: CustomPaint(
-                    painter: _Waveform(
-                      levels: _voice.levels,
-                      color: _cancelling ? AppColors.danger : AppColors.primary,
-                    ),
+                  child: RecordingWaveform(
+                    levels: _voice.levels,
+                    sampleTime: _voice.elapsed,
+                    color: _cancelling ? AppColors.danger : AppColors.primary,
                   ),
                 ),
               ),
@@ -315,7 +314,18 @@ class _RecordingDotState extends State<_RecordingDot>
   late final AnimationController _c = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 900),
-  )..repeat(reverse: true);
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (reduceMotionOf(context)) {
+      _c.stop();
+      _c.value = 1;
+    } else if (!_c.isAnimating) {
+      _c.repeat(reverse: true);
+    }
+  }
 
   @override
   void dispose() {
@@ -337,25 +347,131 @@ class _RecordingDotState extends State<_RecordingDot>
   );
 }
 
-/// Bars drawn from the real microphone levels, newest on the right.
-class _Waveform extends CustomPainter {
-  const _Waveform({required this.levels, required this.color});
+/// Real microphone samples flow left between the recorder's 120 ms readings.
+/// The ticker repaints only this boundary, without rebuilding the composer.
+class RecordingWaveform extends StatefulWidget {
+  const RecordingWaveform({
+    super.key,
+    required this.levels,
+    required this.sampleTime,
+    required this.color,
+  });
+
   final List<double> levels;
+  final Duration sampleTime;
+  final Color color;
+
+  @override
+  State<RecordingWaveform> createState() => _RecordingWaveformState();
+}
+
+class _RecordingWaveformState extends State<RecordingWaveform>
+    with SingleTickerProviderStateMixin {
+  static const _sampleInterval = Duration(milliseconds: 120);
+  static const _maxSamples = 48;
+  late final AnimationController _scroll;
+  late List<double> _levels;
+  late int _lastIndex;
+  bool _reduceMotion = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _levels = List<double>.unmodifiable(
+      widget.levels.skip(math.max(0, widget.levels.length - _maxSamples)),
+    );
+    _lastIndex = _levels.length - 1;
+    _scroll = AnimationController.unbounded(
+      vsync: this,
+      value: _lastIndex.toDouble(),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduceMotion = reduceMotionOf(context);
+    if (_reduceMotion) {
+      _scroll.stop();
+      _scroll.value = _lastIndex.toDouble();
+    }
+  }
+
+  @override
+  void didUpdateWidget(RecordingWaveform oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The recorder reuses its list, so compare the reading timestamp, never
+    // list identity or the latest amplitude (silence can repeat indefinitely).
+    if (widget.sampleTime == oldWidget.sampleTime || widget.levels.isEmpty) {
+      return;
+    }
+    _levels = List<double>.unmodifiable([
+      ..._levels.skip(_levels.length >= _maxSamples ? 1 : 0),
+      widget.levels.last,
+    ]);
+    _lastIndex++;
+    if (_reduceMotion) {
+      _scroll.value = _lastIndex.toDouble();
+    } else {
+      // Continue from the current fractional position, even when a platform
+      // reading arrives late. Resetting a repeating animation would snap.
+      _scroll.animateTo(
+        _lastIndex.toDouble(),
+        duration: _sampleInterval,
+        curve: Curves.linear,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => RepaintBoundary(
+    child: ClipRect(
+      child: CustomPaint(
+        painter: _Waveform(
+          levels: _levels,
+          lastIndex: _lastIndex,
+          scroll: _scroll,
+          color: widget.color,
+        ),
+      ),
+    ),
+  );
+}
+
+/// Rounded bars retain microphone loudness while moving at fractional pixels.
+class _Waveform extends CustomPainter {
+  _Waveform({
+    required this.levels,
+    required this.lastIndex,
+    required this.scroll,
+    required this.color,
+  }) : super(repaint: scroll);
+
+  final List<double> levels;
+  final int lastIndex;
+  final Animation<double> scroll;
   final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (levels.isEmpty) return;
+    if (levels.isEmpty || size.isEmpty) return;
     final paint = Paint()
       ..color = color
       ..strokeCap = StrokeCap.round
       ..strokeWidth = 3;
     const gap = 5.0;
-    final count = math.min(levels.length, (size.width / gap).floor());
-    for (var i = 0; i < count; i++) {
-      final level = levels[levels.length - count + i];
+    for (var i = 0; i < levels.length; i++) {
+      final sampleIndex = lastIndex - levels.length + 1 + i;
+      final x = size.width - gap / 2 - (scroll.value - sampleIndex) * gap;
+      if (x < -gap || x > size.width + gap) continue;
+      final level = levels[i].isFinite ? levels[i].clamp(0.0, 1.0) : 0.0;
       final h = math.max(3.0, level * size.height);
-      final x = size.width - (count - i) * gap + gap / 2;
       canvas.drawLine(
         Offset(x, size.height / 2 - h / 2),
         Offset(x, size.height / 2 + h / 2),
@@ -365,5 +481,9 @@ class _Waveform extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_Waveform old) => true;
+  bool shouldRepaint(_Waveform old) =>
+      old.levels != levels ||
+      old.lastIndex != lastIndex ||
+      old.scroll != scroll ||
+      old.color != color;
 }

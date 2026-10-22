@@ -37,7 +37,7 @@ class SosContactRequest {
 
 /// What a row in a conversation is. Calls leave a trace in the chat the same
 /// way they do in a phone's call log, so a missed one is not silent.
-enum MessageKind { text, voice, missedVoiceCall, missedVideoCall }
+enum MessageKind { text, voice, missedVoiceCall, missedVideoCall, photo }
 
 /// How far one of your own messages has travelled.
 enum MessageStatus { sent, delivered, read }
@@ -46,12 +46,18 @@ enum MessageStatus { sent, delivered, read }
 /// conversation they are reading. Never carries message content.
 @immutable
 class Presence {
-  const Presence({this.online = false, this.lastSeen, this.openWith});
+  const Presence({
+    this.online = false,
+    this.lastSeen,
+    this.openWith,
+    this.typing = false,
+  });
   final bool online;
   final DateTime? lastSeen;
 
   /// The username whose chat they have open, when they are in one.
   final String? openWith;
+  final bool typing;
 
   bool readingWith(String id) => online && openWith == id;
 
@@ -85,6 +91,7 @@ class ChatMessage {
     required this.createdAt,
     this.kind = MessageKind.text,
     this.audio,
+    this.photo,
     this.seconds = 0,
   });
   final String id;
@@ -96,6 +103,7 @@ class ChatMessage {
 
   /// The decoded voice note, held only in memory.
   final Uint8List? audio;
+  final Uint8List? photo;
   final int seconds;
 
   bool get isVoice => kind == MessageKind.voice;
@@ -163,6 +171,7 @@ class CloudOp {
     this.id,
     this.text,
     this.audio,
+    this.photo,
     this.seconds = 0,
   });
 
@@ -176,6 +185,7 @@ class CloudOp {
 
   /// Set for a voice note, alongside its length.
   final Uint8List? audio;
+  final Uint8List? photo;
   final int seconds;
 }
 
@@ -269,6 +279,7 @@ class SocialController extends ChangeNotifier {
     }
     for (final r in m['messages']) {
       final audio = r['audio'] as String?;
+      final photo = r['photo'] as String?;
       _messages.add(
         ChatMessage(
           id: r['id'],
@@ -281,6 +292,7 @@ class SocialController extends ChangeNotifier {
             orElse: () => MessageKind.text,
           ),
           audio: audio == null ? null : base64Decode(audio),
+          photo: photo == null ? null : base64Decode(photo),
           seconds: (r['secs'] as num?)?.toInt() ?? 0,
         ),
       );
@@ -340,6 +352,8 @@ class SocialController extends ChangeNotifier {
   void _wipe() {
     onCloudOp = null;
     onChatOpen = null;
+    onTyping = null;
+    openChat = null;
     syncError = null;
     _profiles
       ..clear()
@@ -488,6 +502,8 @@ class SocialController extends ChangeNotifier {
             // come back from the relay, still sealed, when it is reachable.
             if (r.audio != null && keepAudio.contains(r.id))
               'audio': base64Encode(r.audio!),
+            if (r.photo != null && keepAudio.contains(r.id))
+              'photo': base64Encode(r.photo!),
             if (r.seconds > 0) 'secs': r.seconds,
           },
       ],
@@ -566,6 +582,7 @@ class SocialController extends ChangeNotifier {
 
   @override
   void notifyListeners() {
+    ++_durableRevision;
     final write = persist;
     final keyed = persistAccount;
     final key = accountKey;
@@ -593,6 +610,11 @@ class SocialController extends ChangeNotifier {
     }
     super.notifyListeners();
   }
+
+  int _durableRevision = 0;
+
+  /// Increases only for account/device changes, not ephemeral live hints.
+  int get durableRevision => _durableRevision;
 
   @override
   void dispose() {
@@ -791,7 +813,7 @@ class SocialController extends ChangeNotifier {
   void applyCloudGraph({
     required String mine,
     required List<({String from, String to, String status})> reqs,
-    required List<({String from, String to, String status})> links,
+    required List<({String from, String to, String status})>? links,
     required Map<String, String> names,
   }) {
     // A cancelled listener may finish its profile lookup after account switch.
@@ -807,7 +829,7 @@ class SocialController extends ChangeNotifier {
       know(r.from);
       know(r.to);
     }
-    for (final l in links) {
+    for (final l in links ?? <({String from, String to, String status})>[]) {
       know(l.from);
       know(l.to);
     }
@@ -823,9 +845,11 @@ class SocialController extends ChangeNotifier {
     }
     _requests.clear();
     _friendships.clear();
-    _favorites.clear();
-    _approved.clear();
-    _pendingConsent.clear();
+    if (links != null) {
+      _favorites.clear();
+      _approved.clear();
+      _pendingConsent.clear();
+    }
     for (final r in reqs) {
       if (r.status == 'accepted') {
         _friendships.add(_pair(id(r.from), id(r.to)));
@@ -839,7 +863,7 @@ class SocialController extends ChangeNotifier {
         );
       }
     }
-    for (final l in links) {
+    for (final l in links ?? <({String from, String to, String status})>[]) {
       final key = _directed(id(l.from), id(l.to));
       _favorites.add(key);
       if (l.status == 'approved') {
@@ -853,6 +877,13 @@ class SocialController extends ChangeNotifier {
 
   /// Ids of the messages held on this device.
   Set<String> get messageIds => {for (final m in _messages) m.id};
+
+  Set<String> get loadedMessageIds => {
+    for (final m in _messages)
+      if (!(m.isVoice && m.audio == null) &&
+          !(m.kind == MessageKind.photo && m.photo == null))
+        m.id,
+  };
 
   /// A problem with the cloud connection worth showing, or null.
   String? syncError;
@@ -914,11 +945,28 @@ class SocialController extends ChangeNotifier {
 
   /// Adds messages the cloud delivered that this device has not seen.
   void applyCloudMessages(List<ChatMessage> incoming) {
-    final known = _messages.map((m) => m.id).toSet();
-    final fresh = incoming.where((m) => !known.contains(m.id)).toList();
-    if (fresh.isEmpty) return;
-    _messages.addAll(fresh);
-    notifyListeners();
+    final indices = {
+      for (var i = 0; i < _messages.length; i++) _messages[i].id: i,
+    };
+    var changed = false;
+    for (final m in incoming) {
+      final index = indices[m.id];
+      if (index == null) {
+        indices[m.id] = _messages.length;
+        _messages.add(m);
+        changed = true;
+      } else {
+        final old = _messages[index];
+        if ((old.isVoice && old.audio == null && m.audio != null) ||
+            (old.kind == MessageKind.photo &&
+                old.photo == null &&
+                m.photo != null)) {
+          _messages[index] = m;
+          changed = true;
+        }
+      }
+    }
+    if (changed) notifyListeners();
   }
 
   /// Preview helper for local mode: makes [friendId] a buddy with a first
@@ -1060,23 +1108,58 @@ class SocialController extends ChangeNotifier {
 
   void applyReceipt(String messageId, {DateTime? delivered, DateTime? read}) {
     final old = _receipts[messageId];
+    delivered ??= old?.delivered;
+    read ??= old?.read;
     if (old?.delivered == delivered && old?.read == read) return;
     _receipts[messageId] = (delivered: delivered, read: read);
-    notifyListeners();
+    super.notifyListeners();
   }
 
   /// Told which conversation is open, so the cloud layer can publish it.
   void Function(String? peer)? onChatOpen;
+  void Function(bool typing)? onTyping;
+  String? openChat;
 
-  void enterChat(String id) => onChatOpen?.call(id);
-  void leaveChat() => onChatOpen?.call(null);
+  void enterChat(String id) {
+    openChat = id;
+    onChatOpen?.call(id);
+  }
+
+  void leaveChat() {
+    onTyping?.call(false);
+    openChat = null;
+    onChatOpen?.call(null);
+  }
 
   Presence presenceOf(String id) => _presence[id] ?? const Presence();
 
   /// Fed by the cloud layer as buddies open and close the app.
   void applyPresence(String id, Presence p) {
     _presence[id] = p;
-    notifyListeners();
+    super.notifyListeners();
+  }
+
+  /// Server disconnects have no callback in Firestore. Expire stale hints
+  /// locally too, even when the last presence snapshot never changes again.
+  void expirePresence(DateTime now) {
+    var changed = false;
+    for (final entry in _presence.entries.toList()) {
+      final p = entry.value;
+      final at = p.lastSeen;
+      if (at == null) continue;
+      final age = now.difference(at);
+      final online = p.online && age < const Duration(seconds: 70);
+      final typing = p.typing && online && age < const Duration(seconds: 5);
+      if (online == p.online && typing == p.typing) continue;
+      _presence[entry.key] = Presence(
+        online: online,
+        typing: typing,
+        lastSeen: at,
+        openWith: online ? p.openWith : null,
+      );
+      changed = true;
+    }
+    if (changed) super.notifyListeners();
   }
 
   /// Records a call nobody picked up. Each device writes its own line — the
@@ -1107,11 +1190,38 @@ class SocialController extends ChangeNotifier {
 
   /// Recomputed once per save, not once per message.
   Set<String> _audioToKeep() {
-    final withAudio = _messages.where((m) => m.audio != null).toList();
-    final from = withAudio.length <= _audioKept
-        ? 0
-        : withAudio.length - _audioKept;
-    return withAudio.sublist(from).map((m) => m.id).toSet();
+    final kept = <String>{};
+    var bytes = 0;
+    for (final m in _messages.reversed) {
+      final size = (m.audio?.length ?? 0) + (m.photo?.length ?? 0);
+      if (size == 0 || bytes + size > 450000 || kept.length >= _audioKept) {
+        continue;
+      }
+      kept.add(m.id);
+      bytes += size;
+    }
+    return kept;
+  }
+
+  void sendPhoto(String friendId, Uint8List photo) {
+    _requireFriend(friendId);
+    if (photo.isEmpty) return;
+    if (photo.length > 400000) throw StateError('Choose a smaller photo.');
+    final id = _messageId();
+    final bytes = Uint8List.fromList(photo);
+    _messages.add(
+      ChatMessage(
+        id: id,
+        senderId: currentUserId,
+        recipientId: friendId,
+        text: '',
+        createdAt: DateTime.now(),
+        kind: MessageKind.photo,
+        photo: bytes,
+      ),
+    );
+    _emit(CloudOp('photo', friendId, id: id, photo: bytes));
+    notifyListeners();
   }
 
   /// Sends a recorded voice note. The bytes go out sealed, exactly like text.

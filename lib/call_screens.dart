@@ -42,6 +42,31 @@ class CallOverlay extends StatelessWidget {
           onDecline: () => calls.decline(doc),
         );
       }
+      if (calls.error != null) {
+        return Align(
+          alignment: Alignment.topCenter,
+          child: SafeArea(
+            child: Material(
+              elevation: 8,
+              color: Theme.of(context).colorScheme.errorContainer,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(child: Text(calls.error!)),
+                    IconButton(
+                      tooltip: 'Dismiss call error',
+                      onPressed: calls.clearError,
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
       return const SizedBox.shrink();
     },
   );
@@ -231,10 +256,7 @@ class _CallerText extends StatelessWidget {
         ).textTheme.headlineMedium?.copyWith(fontSize: 34),
       ),
       const SizedBox(height: 8),
-      Text(
-        status,
-        style: TextStyle(fontSize: 15, color: AppColors.textMuted),
-      ),
+      Text(status, style: TextStyle(fontSize: 15, color: AppColors.textMuted)),
     ],
   );
 }
@@ -367,10 +389,23 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   }
 
   Future<void> _setup() async {
-    await _remote.initialize();
-    await _local.initialize();
-    _ready = true;
-    _update();
+    try {
+      await _remote.initialize();
+      if (!mounted) {
+        await _remote.dispose();
+        return;
+      }
+      await _local.initialize();
+      if (!mounted) {
+        await _local.dispose();
+        return;
+      }
+      _ready = true;
+      _update();
+    } catch (_) {
+      // The call controls must remain usable if this device cannot render
+      // video. Media/setup failures are reported by the session itself.
+    }
   }
 
   void _update() {
@@ -422,9 +457,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
       ),
     if (s.hasVideo && !_watchingSos)
       _RoundButton(
-        icon: s.cameraOn
-            ? Icons.videocam_rounded
-            : Icons.videocam_off_rounded,
+        icon: s.cameraOn ? Icons.videocam_rounded : Icons.videocam_off_rounded,
         label: 'Camera',
         onTap: () => s.setCamera(!s.cameraOn),
       ),
@@ -512,8 +545,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                   // Not mirrored: this is the picture the other side receives.
                   child: RTCVideoView(
                     _local,
-                    objectFit:
-                        RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                    objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
                   ),
                 ),
               ),
@@ -610,9 +642,7 @@ class _RoundButton extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: filled ? fill : AppColors.surface,
-              border: Border.all(
-                color: filled ? fill : AppColors.border,
-              ),
+              border: Border.all(color: filled ? fill : AppColors.border),
             ),
             child: Icon(
               icon,

@@ -114,6 +114,10 @@ service cloud.firestore {
             && request.resource.data.secs is int
             && request.resource.data.secs > 0
             && request.resource.data.secs <= 60)
+          ||
+          (request.resource.data.keys().hasOnly(['from', 'to', 'photo', 'createdAt'])
+            && request.resource.data.photo is string
+            && request.resource.data.photo.size() < 540000)
         );
       // Only the person it was sent to may mark it delivered or read, and only
       // by adding those stamps — the ciphertext itself can never be touched.
@@ -122,7 +126,7 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['deliveredAt', 'readAt'])
         && request.resource.data.keys().hasOnly(
-             ['from', 'to', 'ct', 'voice', 'secs', 'createdAt',
+             ['from', 'to', 'ct', 'voice', 'photo', 'secs', 'createdAt',
               'deliveredAt', 'readAt']);
       allow delete: if false;
     }
@@ -179,10 +183,13 @@ service cloud.firestore {
       allow get, list: if request.auth != null
         && (resource.data.caller == me() || resource.data.callee == me());
       allow create: if request.auth != null
-        && request.resource.data.keys().hasOnly(['caller', 'callee', 'kind', 'status', 'offer', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['caller', 'callee', 'kind', 'status', 'offer', 'createdAt', 'expiresAt'])
         && request.resource.data.caller == me()
         && request.resource.data.status == 'ringing'
         && request.resource.data.kind in ['audio', 'video', 'sos']
+        && (!request.resource.data.keys().hasAny(['expiresAt'])
+          || (request.resource.data.expiresAt is timestamp
+            && request.resource.data.expiresAt <= request.time + duration.value(120, 's')))
         && friendsOf(pairId(request.resource.data.caller, request.resource.data.callee))
         && (request.resource.data.kind != 'sos'
           || get(/databases/$(database)/documents/sosLinks/$(request.resource.data.caller + '__' + request.resource.data.callee)).data.status == 'approved');
@@ -215,8 +222,9 @@ service cloud.firestore {
     // themselves may write it. "openWith" is a username, never message text.
     match /presence/{name} {
       allow create, update: if request.auth != null && name == me()
-        && request.resource.data.keys().hasOnly(['online', 'at', 'openWith'])
-        && request.resource.data.online is bool;
+        && request.resource.data.keys().hasOnly(['online', 'at', 'openWith', 'typing'])
+        && request.resource.data.online is bool
+        && request.resource.data.get('typing', false) is bool;
       allow get: if request.auth != null
         && (name == me() || friendsOf(pairId(me(), name)));
       allow list, delete: if false;

@@ -4,13 +4,16 @@ import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
+import 'chat_photo.dart';
 import 'call_controller.dart';
 import 'call_signaling.dart';
 import 'incoming_sos_screen.dart';
 import 'social_controller.dart';
 import 'theme/tokens.dart';
 import 'ui/chat_composer.dart';
+import 'ui/chat_presence.dart';
 import 'ui/design.dart';
 import 'ui/motion.dart';
 
@@ -21,6 +24,7 @@ class ChatScreen extends StatefulWidget {
     required this.friendId,
     this.calls,
     this.safetyBannerBuilder,
+    this.photoPicker,
   });
 
   final SocialController social;
@@ -29,6 +33,7 @@ class ChatScreen extends StatefulWidget {
   final CallController? calls;
   final String friendId;
   final WidgetBuilder? safetyBannerBuilder;
+  final Future<Uint8List?> Function(ImageSource source)? photoPicker;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -37,22 +42,39 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _composer = TextEditingController();
   final _scroll = ScrollController();
+  bool _pickingPhoto = false;
   late final String _ownerId = widget.social.currentUserId;
+  late final String? _ownerAccount = widget.social.accountKey;
+  late final String _ownerUsername = widget.social.currentUser.username;
+
+  bool get _sameAccount =>
+      widget.social.currentUserId == _ownerId &&
+      widget.social.accountKey == _ownerAccount &&
+      widget.social.currentUser.username == _ownerUsername;
 
   bool get _available =>
-      widget.social.currentUserId == _ownerId &&
-      widget.social.areFriends(_ownerId, widget.friendId);
+      _sameAccount && widget.social.areFriends(_ownerId, widget.friendId);
 
   @override
   void initState() {
     super.initState();
     // Lets the other side see that this conversation is being read.
     widget.social.enterChat(widget.friendId);
+    _composer.addListener(_typingChanged);
+  }
+
+  void _typingChanged() {
+    if (_available) {
+      widget.social.onTyping?.call(_composer.text.trim().isNotEmpty);
+    }
   }
 
   @override
   void dispose() {
-    widget.social.leaveChat();
+    if (_sameAccount && widget.social.openChat == widget.friendId) {
+      widget.social.leaveChat();
+    }
+    _composer.removeListener(_typingChanged);
     _composer.dispose();
     _scroll.dispose();
     super.dispose();
@@ -188,8 +210,32 @@ class _ChatScreenState extends State<ChatScreen> {
       ..showSnackBar(SnackBar(content: Text('$what is not ready yet.')));
   }
 
-  void _takePhoto() => _notYet('Sending photos');
-  void _pickPhoto() => _notYet('Sending photos');
+  Future<void> _choosePhoto(ImageSource source) async {
+    if (!_available || _pickingPhoto) return;
+    widget.social.onTyping?.call(false);
+    setState(() => _pickingPhoto = true);
+    try {
+      final photo = await (widget.photoPicker ?? pickChatPhoto)(source);
+      if (!mounted || !_available || photo == null) return;
+      widget.social.sendPhoto(widget.friendId, photo);
+      _scrollToEnd();
+    } catch (_) {
+      if (mounted && _available) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not open this photo. Check camera/photo permission and try again.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _pickingPhoto = false);
+    }
+  }
+
+  void _takePhoto() => _choosePhoto(ImageSource.camera);
+  void _pickPhoto() => _choosePhoto(ImageSource.gallery);
   void _shareLocation() => _notYet('Sharing your location in chat');
 
   void _call(bool video) {
@@ -292,47 +338,15 @@ class _ChatScreenState extends State<ChatScreen> {
                             final here = widget.social.presenceOf(friend.id);
                             // Reading this very chat gets the live dot; online
                             // elsewhere, or a last seen, is just the line.
-                            final reading = here.readingWith(_ownerId);
+                            final reading = here.readingWith(_ownerUsername);
                             final status = here.label.isEmpty
                                 ? (sos ? 'SOS buddy' : 'Buddy')
                                 : here.label;
-                            return Row(
-                              children: [
-                                AnimatedContainer(
-                                  duration: Motion.standard,
-                                  width: 7,
-                                  height: 7,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: here.online
-                                        ? AppColors.success
-                                        : AppColors.textMuted,
-                                    boxShadow: reading
-                                        ? [
-                                            BoxShadow(
-                                              color: AppColors.success,
-                                              blurRadius: 6,
-                                              spreadRadius: 1,
-                                            ),
-                                          ]
-                                        : null,
-                                  ),
-                                ),
-                                const SizedBox(width: 5),
-                                Flexible(
-                                  child: Text(
-                                    status,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      fontSize: 12,
-                                      color: here.online
-                                          ? AppColors.success
-                                          : null,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            return ChatPresenceIndicator(
+                              online: here.online,
+                              reading: reading,
+                              typing: reading && here.typing,
+                              label: status,
                             );
                           },
                         ),
@@ -450,6 +464,11 @@ class _ChatScreenState extends State<ChatScreen> {
                                 reverse: true,
                                 padding: const EdgeInsets.all(16),
                                 itemCount: messages.length,
+                                findChildIndexCallback: (key) {
+                                  if (key is! ValueKey<String>) return null;
+                                  final index = messages.indexWhere((m) => m.id == key.value);
+                                  return index < 0 ? null : messages.length - index - 1;
+                                },
                                 itemBuilder: (context, index) {
                                   final at = messages.length - index - 1;
                                   final message = messages[at];
@@ -461,6 +480,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                         day,
                                       );
                                   return Column(
+                                    key: ValueKey(message.id),
                                     crossAxisAlignment:
                                         CrossAxisAlignment.stretch,
                                     children: [
@@ -499,6 +519,21 @@ class _ChatScreenState extends State<ChatScreen> {
                                 },
                               ),
                       ),
+                      if (widget.social.syncError != null && available)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            widget.social.syncError!,
+                            style: TextStyle(color: AppColors.danger),
+                          ),
+                        ),
+                      if (_pickingPhoto)
+                        const LinearProgressIndicator(
+                          semanticsLabel: 'Preparing photo',
+                        ),
                       Padding(
                         padding: EdgeInsets.fromLTRB(
                           16,
@@ -508,7 +543,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                         child: ChatComposer(
                           controller: _composer,
-                          enabled: available,
+                          enabled: available && !_pickingPhoto,
                           onSend: _send,
                           onVoice: _sendVoice,
                           onAttach: _openAttachments,
@@ -1023,13 +1058,16 @@ class _Bubble extends StatelessWidget {
               crossAxisAlignment: WrapCrossAlignment.end,
               spacing: 10,
               children: [
-                Text(
-                  message.text,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: fg,
-                    fontSize: 14.5,
+                if (message.kind == MessageKind.photo)
+                  _ChatPhoto(message.photo)
+                else
+                  Text(
+                    message.text,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: fg,
+                      fontSize: 14.5,
+                    ),
                   ),
-                ),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -1050,6 +1088,51 @@ class _Bubble extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatPhoto extends StatelessWidget {
+  const _ChatPhoto(this.bytes);
+  final Uint8List? bytes;
+  @override
+  Widget build(BuildContext context) {
+    if (bytes == null) {
+      return const Text('Photo is not available on this device.');
+    }
+    Widget photo({BoxFit fit = BoxFit.contain}) => Image.memory(
+      bytes!,
+      fit: fit,
+      semanticLabel: 'Chat photo',
+      errorBuilder: (_, _, _) => const Text('This photo could not be opened.'),
+    );
+    return GestureDetector(
+      onTap: () => showDialog<void>(
+        context: context,
+        builder: (dialog) => Dialog(
+          child: Stack(
+            children: [
+              InteractiveViewer(child: photo()),
+              Positioned(
+                right: 0,
+                top: 0,
+                child: IconButton(
+                  tooltip: 'Close photo',
+                  onPressed: () => Navigator.pop(dialog),
+                  icon: const Icon(Icons.close),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 260, maxHeight: 300),
+          child: photo(),
         ),
       ),
     );

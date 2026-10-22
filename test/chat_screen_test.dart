@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:safeher/chat_screen.dart';
 import 'package:safeher/social_controller.dart';
@@ -28,6 +31,127 @@ void main() {
           ),
         ),
       );
+
+  testWidgets(
+    'camera opens picker and cancellation sends no placeholder message',
+    (tester) async {
+      ImageSource? source;
+      final before = social.messagesWith('ayesha').length;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ChatScreen(
+            social: social,
+            friendId: 'ayesha',
+            photoPicker: (requested) async {
+              source = requested;
+              return null;
+            },
+          ),
+        ),
+      );
+      await tester.tap(find.byIcon(Icons.photo_camera_rounded));
+      await tester.pump();
+      expect(source, ImageSource.camera);
+      expect(social.messagesWith('ayesha').length, before);
+      expect(find.textContaining('not ready yet'), findsNothing);
+    },
+  );
+
+  testWidgets('late camera result cannot send under the next account', (
+    tester,
+  ) async {
+    final photo = Completer<Uint8List?>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChatScreen(
+          social: social,
+          friendId: 'ayesha',
+          photoPicker: (_) => photo.future,
+        ),
+      ),
+    );
+    await tester.tap(find.byIcon(Icons.photo_camera_rounded));
+    social.enterAccount(
+      'other_user',
+      null,
+      name: 'Other',
+      username: 'other_user',
+    );
+    social.seedDemoFriend('ayesha');
+    photo.complete(Uint8List.fromList([255, 216, 255, 217]));
+    await tester.pump();
+    expect(
+      social.messagesWith('ayesha').where((m) => m.kind == MessageKind.photo),
+      isEmpty,
+    );
+  });
+
+  testWidgets('typing is sent from composer and cleared after sending', (
+    tester,
+  ) async {
+    final events = <bool>[];
+    social.onTyping = events.add;
+    await openChat(tester);
+    await tester.enterText(find.byType(TextField), 'Hello');
+    await tester.pump();
+    expect(events, contains(true));
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pump();
+    expect(events.last, false);
+  });
+
+  testWidgets('peer typing is visible only in this conversation', (
+    tester,
+  ) async {
+    social.applyPresence(
+      'ayesha',
+      const Presence(online: true, openWith: 'hammad', typing: true),
+    );
+    await openChat(tester);
+    expect(find.text('typing…'), findsOneWidget);
+    social.applyPresence(
+      'ayesha',
+      const Presence(online: true, openWith: 'someone_else', typing: true),
+    );
+    await tester.pump();
+    expect(find.text('typing…'), findsNothing);
+  });
+
+  testWidgets(
+    'cloud presence compares username rather than device-local profile id',
+    (tester) async {
+      social.enterAccount(
+        'phone_user',
+        null,
+        name: 'Phone',
+        username: 'phone_user',
+      );
+      social.seedDemoFriend('ayesha');
+      social.applyPresence(
+        'ayesha',
+        const Presence(online: true, openWith: 'phone_user', typing: true),
+      );
+      await openChat(tester);
+      expect(find.text('typing…'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'switching real accounts with same local profile id hides old chat',
+    (tester) async {
+      await openChat(tester);
+      social.enterAccount(
+        'other_user',
+        null,
+        name: 'Other',
+        username: 'other_user',
+      );
+      social.seedDemoFriend('ayesha');
+      await tester.pump();
+      final composer = tester.widget<TextField>(find.byType(TextField));
+      expect(composer.enabled, false);
+    },
+  );
 
   testWidgets('every conversation says it is end-to-end encrypted', (
     tester,

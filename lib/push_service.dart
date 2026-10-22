@@ -14,28 +14,35 @@ class PushService {
   StreamSubscription<String>? _refresh;
   String? _me;
   String? _token;
+  int _generation = 0;
 
   DocumentReference<Map<String, dynamic>> _ref(String me) =>
       _db.collection('pushTokens').doc(me);
 
   Future<void> register(String me) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    final generation = ++_generation;
     _me = me;
+    _token = null;
     final messaging = FirebaseMessaging.instance;
     final settings = await messaging.requestPermission();
+    if (_me != me || _generation != generation) return;
     if (settings.authorizationStatus == AuthorizationStatus.denied) return;
     // getToken/onTokenRefresh are deprecated in favour of installation-id
     // sending, but the server function below sends to classic tokens.
     // ignore: deprecated_member_use
     final token = await messaging.getToken();
-    if (token != null) await _save(token);
+    if (_me != me || _generation != generation) return;
+    if (token != null) await _save(token, me, generation);
+    if (_me != me || _generation != generation) return;
     // ignore: deprecated_member_use
-    _refresh = messaging.onTokenRefresh.listen(_save);
+    _refresh = messaging.onTokenRefresh.listen((token) {
+      unawaited(_save(token, me, generation).catchError((Object _) {}));
+    });
   }
 
-  Future<void> _save(String token) async {
-    final me = _me;
-    if (me == null) return;
+  Future<void> _save(String token, String me, int generation) async {
+    if (_me != me || _generation != generation) return;
     _token = token;
     await _ref(me).set({
       'token': token,
@@ -46,15 +53,18 @@ class PushService {
 
   /// Stops this phone receiving the account's alerts (sign out).
   Future<void> unregister() async {
-    await _refresh?.cancel();
-    _refresh = null;
+    ++_generation;
+    final refresh = _refresh;
     final me = _me;
+    final token = _token;
+    _refresh = null;
     _me = null;
-    if (me != null && _token != null) {
+    _token = null;
+    await refresh?.cancel();
+    if (me != null && token != null && _me != me) {
       try {
         await _ref(me).delete();
       } catch (_) {}
     }
-    _token = null;
   }
 }

@@ -304,6 +304,7 @@ class _SafeHerShellState extends State<SafeHerShell>
   String? _recoveryCode; // shown once, right after backup is turned on
   bool _needsRestore = false;
   Timer? _backupTimer;
+  ({String uid, String account, int revision})? _backupScheduled;
   CloudSocial? _cloud;
 
   /// The app owns this so the call overlay sits above every pushed route; a
@@ -398,6 +399,13 @@ class _SafeHerShellState extends State<SafeHerShell>
     final uid = _backupUid;
     final key = uid == null ? null : widget.vault?.backupKey(uid);
     if (uid == null || key == null || social.accountKey == null) return;
+    final change = (
+      uid: uid,
+      account: social.accountKey!,
+      revision: social.durableRevision,
+    );
+    if (_backupScheduled == change) return;
+    _backupScheduled = change;
     _backupTimer?.cancel();
     _backupTimer = Timer(const Duration(seconds: 4), () => _saveBackup());
   }
@@ -741,12 +749,14 @@ class _SafeHerShellState extends State<SafeHerShell>
   /// permission dialog, the dialer) do not lock.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
       _pausedAt = DateTime.now();
       // Buddies should see "last seen", not an account that is still online.
       _cloud?.goAway();
     } else if (state == AppLifecycleState.resumed) {
-      _cloud?.setOpenChat(null);
+      _cloud?.resume();
       final away = _pausedAt;
       _pausedAt = null;
       if (away != null &&
@@ -1146,7 +1156,9 @@ class _SafeHerShellState extends State<SafeHerShell>
                       child: switch (page) {
                         0 => _homePage(),
                         1 => ContactsScreen(
-                          key: ValueKey(social.accountKey ?? social.currentUserId),
+                          key: ValueKey(
+                            social.accountKey ?? social.currentUserId,
+                          ),
                           social: social,
                           calls: calls,
                           safetyBannerBuilder: _routeSosBanner,

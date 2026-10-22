@@ -126,8 +126,9 @@ class FirebaseAuthService implements AuthService {
   Future<void> _reserve(User user, String username) =>
       _db.runTransaction((tx) async {
         final taken = await tx.get(_name(username));
-        if (taken.exists)
+        if (taken.exists) {
           throw const AuthFailure('That username is already taken.');
+        }
         tx.set(_name(username), {
           'uid': user.uid,
           'email': user.email,
@@ -182,7 +183,7 @@ class FirebaseAuthService implements AuthService {
         .where(FieldPath.documentId, isGreaterThanOrEqualTo: term)
         .where(FieldPath.documentId, isLessThan: '$term\uf8ff')
         .limit(10)
-        .get();
+        .get(const GetOptions(source: Source.server));
     return [
       for (final d in snap.docs)
         RemoteProfile(
@@ -232,8 +233,15 @@ class FirebaseAuthService implements AuthService {
         'weak-password' => 'Choose a stronger password.',
         _ => 'Could not create the account. Try again.',
       });
-    } on FirebaseException {
-      throw const AuthFailure('That username is already taken.');
+    } on FirebaseException catch (e) {
+      if (e.code == 'resource-exhausted') {
+        throw const AuthFailure(
+          'SafeHer has reached its service limit. Account setup could not finish. Please try again later.',
+        );
+      }
+      throw const AuthFailure(
+        'Could not finish account setup. Check your connection and try again.',
+      );
     }
   }
 

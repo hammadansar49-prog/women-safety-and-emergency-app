@@ -1,4 +1,18 @@
 pluginManagement {
+    buildscript {
+        repositories {
+            google()
+            mavenCentral()
+            maven {
+                url = uri("https://storage.googleapis.com/r8-releases/raw")
+                content { includeModule("com.android.tools", "r8") }
+            }
+        }
+        dependencies {
+            // Firebase Auth 25 requires Kotlin 2.4 metadata support.
+            classpath("com.android.tools:r8:9.1.29")
+        }
+    }
     val flutterSdkPath =
         run {
             val properties = java.util.Properties()

@@ -8,6 +8,7 @@ import 'package:image/image.dart' as img;
 import 'social_controller.dart';
 import 'photo_crop_screen.dart';
 import 'photo_decoder.dart';
+import 'image_picker_intent.dart';
 
 Future<String> prepareProfilePhoto(XFile file) async {
   final bytes = await file.readAsBytes();
@@ -105,33 +106,42 @@ class _ProfilePhotoEditorState extends State<ProfilePhotoEditor> {
   bool pressed = false;
   String? error;
   Future<void> choose() async {
-    final owner = widget.social.currentUserId;
+    final owner = (
+      key: widget.social.accountKey,
+      username: widget.social.currentUser.username,
+    );
+    bool sameOwner() =>
+        owner.key == widget.social.accountKey &&
+        owner.username == widget.social.currentUser.username;
     setState(() {
       busy = true;
       error = null;
     });
     var stage = 'picker';
+    ImagePickerIntent? intent;
     try {
+      intent = await ImagePickerIntent.begin('profile', owner: owner.key);
+      if (!mounted || !sameOwner()) return;
       final file = await ImagePicker().pickImage(
         source: ImageSource.gallery,
         requestFullMetadata: false,
       );
-      if (file == null) return;
+      if (file == null || !mounted || !sameOwner()) return;
       stage = 'image';
       final bytes = await file.readAsBytes();
-      if (!mounted || owner != widget.social.currentUserId) return;
+      if (!mounted || !sameOwner()) return;
       final cropped = await Navigator.push<Uint8List>(
         context,
         MaterialPageRoute(builder: (_) => PhotoCropScreen(bytes: bytes)),
       );
-      if (cropped == null) return;
+      if (cropped == null || !mounted || !sameOwner()) return;
       final data = await prepareProfilePhoto(XFile.fromData(cropped));
-      if (!mounted || owner != widget.social.currentUserId) return;
+      if (!mounted || !sameOwner()) return;
       stage = 'save';
       widget.social.setPhoto(data);
       await widget.social.flush();
     } catch (exception) {
-      if (mounted) {
+      if (mounted && sameOwner()) {
         setState(
           () => error = stage == 'save'
               ? 'Photo selected, but not saved. Check device storage and tap Retry above.'
@@ -143,13 +153,18 @@ class _ProfilePhotoEditorState extends State<ProfilePhotoEditor> {
         );
       }
     } finally {
+      await intent?.clear();
       if (mounted) setState(() => busy = false);
     }
   }
 
   Future<void> showOptions() async {
-    final owner = widget.social.currentUserId;
-    final hasPhoto = widget.social.photoFor(owner) != null;
+    final owner = (
+      key: widget.social.accountKey,
+      username: widget.social.currentUser.username,
+    );
+    final hasPhoto =
+        widget.social.photoFor(widget.social.currentUserId) != null;
     final action = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -182,7 +197,11 @@ class _ProfilePhotoEditorState extends State<ProfilePhotoEditor> {
         ],
       ),
     );
-    if (!mounted || owner != widget.social.currentUserId) return;
+    if (!mounted ||
+        owner.key != widget.social.accountKey ||
+        owner.username != widget.social.currentUser.username) {
+      return;
+    }
     if (action == 'upload') await choose();
     if (action == 'remove') {
       widget.social.setPhoto(null);
@@ -269,9 +288,50 @@ class _ProfilePhotoEditorState extends State<ProfilePhotoEditor> {
 
 Future<void> recoverProfilePhoto(SocialController social) async {
   if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+  final owner = (key: social.accountKey, username: social.currentUser.username);
+  bool sameOwner() =>
+      owner.key == social.accountKey &&
+      owner.username == social.currentUser.username;
+  final intent = ImagePickerIntent.current;
   final result = await ImagePicker().retrieveLostData();
-  if (result.files?.isNotEmpty == true) {
-    social.setPhoto(await prepareProfilePhoto(result.files!.first));
+  final files = result.files;
+  if (files == null || files.isEmpty) return;
+  // Lost data is shared by every image-picker flow. Never infer its purpose
+  // from startup location, or the device-local profile id reused by accounts.
+  if (!sameOwner() ||
+      owner.key == null ||
+      intent?.purpose != 'profile' ||
+      intent?.owner != owner.key) {
+    await ImagePickerIntent.preserveRecovered(
+      intent,
+      files.map((file) => file.path).toList(),
+    );
+    await intent?.clear();
+    if (sameOwner()) {
+      social.saveError = intent?.purpose == 'chat'
+          ? 'Your interrupted chat photo was not sent. Please choose it again.'
+          : 'An interrupted photo was not applied. Please choose it again.';
+    }
+    return;
+  }
+  try {
+    final photo = await prepareProfilePhoto(files.first);
+    if (!sameOwner()) {
+      await ImagePickerIntent.preserveRecovered(
+        intent,
+        files.map((file) => file.path).toList(),
+      );
+      return;
+    }
+    social.setPhoto(photo);
     await social.flush();
+  } catch (_) {
+    await ImagePickerIntent.preserveRecovered(
+      intent,
+      files.map((file) => file.path).toList(),
+    );
+    rethrow;
+  } finally {
+    await intent?.clear();
   }
 }
