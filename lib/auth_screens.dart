@@ -16,7 +16,6 @@ class _Field extends StatelessWidget {
     required this.icon,
     this.obscure = false,
     this.keyboardType,
-    this.prefixText,
     this.textInputAction,
     this.onSubmitted,
     this.onChanged,
@@ -30,7 +29,6 @@ class _Field extends StatelessWidget {
   final IconData icon;
   final bool obscure;
   final TextInputType? keyboardType;
-  final String? prefixText;
   final TextInputAction? textInputAction;
   final ValueChanged<String>? onSubmitted;
 
@@ -43,7 +41,6 @@ class _Field extends StatelessWidget {
       icon: icon,
       obscure: obscure,
       keyboardType: keyboardType,
-      prefixText: prefixText,
       textInputAction: textInputAction,
       onSubmitted: onSubmitted,
       onChanged: onChanged,
@@ -253,6 +250,7 @@ class _LoginScreenState extends State<LoginScreen> {
         'Welcome back.',
         'Sign in to keep your circle close.',
       ),
+      // ignore: sort_child_properties_last
       children: [
         _Field(
           shadow: true,
@@ -439,6 +437,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
         ],
       ),
+      // ignore: sort_child_properties_last
       children: [
         _Field(
           controller: _name,
@@ -615,6 +614,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ),
         ],
       ),
+      // ignore: sort_child_properties_last
       children: [
         if (!_sent) ...[
           _Field(

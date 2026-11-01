@@ -57,6 +57,7 @@ class _FakeSignaling implements CallSignaling {
       const Stream.empty();
 }
 
+// ignore: subtype_of_sealed_class
 class _CallSnapshot implements DocumentSnapshot<Map<String, dynamic>> {
   _CallSnapshot(this.record);
   final Map<String, dynamic> record;
