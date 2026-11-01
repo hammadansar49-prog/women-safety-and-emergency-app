@@ -23,6 +23,8 @@ import 'ui/motion.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'helplines.dart';
 import 'check_in.dart';
+import 'shake_detector.dart';
+import 'secure_window.dart';
 import 'ui/design.dart';
 import 'ui/sos_map_card.dart';
 import 'ui/sos_slider.dart';
@@ -317,6 +319,15 @@ class _SafeHerShellState extends State<SafeHerShell>
   bool _needsRestore = false;
   Timer? _backupTimer;
   Timer? _checkInTimer;
+  late final ShakeDetector _shake = ShakeDetector(
+    onShake: () {
+      if (!mounted || !social.signedIn || !social.guideSeen) return;
+      if (emergency.status != EmergencyStatus.idle) return;
+      // Always with the countdown: a shake can be accidental.
+      _startSos();
+    },
+  );
+  final _secureWindow = SecureWindow();
   ({String uid, String account, int revision})? _backupScheduled;
   CloudSocial? _cloud;
 
@@ -683,6 +694,8 @@ class _SafeHerShellState extends State<SafeHerShell>
       }
     }
     emergency.addListener(_syncEmergency);
+    social.addListener(_syncDeviceSettings);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncDeviceSettings());
     _checkInTimer = Timer.periodic(
       const Duration(seconds: 15),
       (_) => _checkCheckIn(),
@@ -938,6 +951,16 @@ class _SafeHerShellState extends State<SafeHerShell>
     }
   }
 
+  /// Applies the shake and screenshot settings to the device.
+  void _syncDeviceSettings() {
+    if (social.signedIn && social.shakeSos) {
+      _shake.start();
+    } else {
+      _shake.stop();
+    }
+    _secureWindow.apply(social.blockScreenshots);
+  }
+
   /// A missed safe-walk check-in raises an SOS on the user's behalf.
   void _checkCheckIn() {
     final due = social.checkInDue;
@@ -1090,6 +1113,8 @@ class _SafeHerShellState extends State<SafeHerShell>
     if (_ownsCalls) calls.dispose();
     _backupTimer?.cancel();
     _checkInTimer?.cancel();
+    social.removeListener(_syncDeviceSettings);
+    _shake.stop();
     _usernameChecker.dispose();
     WidgetsBinding.instance.removeObserver(this);
     shortcut.dispose();
@@ -1984,6 +2009,34 @@ class _SafeHerShellState extends State<SafeHerShell>
                       value: social.silentSos,
                       label: 'Silent SOS',
                       onChanged: social.setSilentSos,
+                    ),
+                  ),
+                ),
+                ListenableBuilder(
+                  listenable: social,
+                  builder: (context, _) => RowCard(
+                    leading: const IconChip(Icons.vibration_rounded),
+                    title: 'Shake to SOS',
+                    detail:
+                        'Shake the phone hard three times while SafeHer is open to start the SOS countdown.',
+                    trailing: SoftSwitch(
+                      value: social.shakeSos,
+                      label: 'Shake to SOS',
+                      onChanged: social.setShakeSos,
+                    ),
+                  ),
+                ),
+                ListenableBuilder(
+                  listenable: social,
+                  builder: (context, _) => RowCard(
+                    leading: const IconChip(Icons.screenshot_monitor_outlined),
+                    title: 'Block screenshots',
+                    detail:
+                        'Hides chats and SOS screens from screenshots, screen recording and the recent-apps view.',
+                    trailing: SoftSwitch(
+                      value: social.blockScreenshots,
+                      label: 'Block screenshots',
+                      onChanged: social.setBlockScreenshots,
                     ),
                   ),
                 ),

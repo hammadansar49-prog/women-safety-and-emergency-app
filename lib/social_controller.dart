@@ -287,6 +287,8 @@ class SocialController extends ChangeNotifier {
     appearance = appearanceChosen ? (m['appearance'] ?? 'light') : 'light';
     countdown = m['countdown'] ?? 5;
     silentSos = m['silentSos'] == true;
+    shakeSos = m['shakeSos'] == true;
+    blockScreenshots = m['blockScreenshots'] != false;
     checkInDue = DateTime.tryParse(m['checkInDue'] as String? ?? '');
     shortcutKey = m['shortcutKey'] == 'volumeDown' ? 'volumeDown' : 'volumeUp';
     identityPriv = m['idPriv'] as String?;
@@ -390,6 +392,8 @@ class SocialController extends ChangeNotifier {
     signedIn = false;
     countdown = 5;
     silentSos = false;
+    shakeSos = false;
+    blockScreenshots = true;
     checkInDue = null;
     shortcutKey = 'volumeUp';
     _pinSalt = null;
@@ -500,6 +504,8 @@ class SocialController extends ChangeNotifier {
       'appearanceChosen': appearanceChosen,
       'countdown': countdown,
       'silentSos': silentSos,
+      'shakeSos': shakeSos,
+      'blockScreenshots': blockScreenshots,
       'checkInDue': checkInDue?.toUtc().toIso8601String(),
       'shortcutKey': shortcutKey,
       'idPriv': identityPriv,
@@ -571,6 +577,20 @@ class SocialController extends ChangeNotifier {
   bool silentSos = false;
   void setSilentSos(bool value) {
     silentSos = value;
+    notifyListeners();
+  }
+
+  /// Shaking the phone hard three times starts an SOS (with countdown).
+  bool shakeSos = false;
+  void setShakeSos(bool value) {
+    shakeSos = value;
+    notifyListeners();
+  }
+
+  /// Keeps SafeHer out of screenshots and the recent-apps preview.
+  bool blockScreenshots = true;
+  void setBlockScreenshots(bool value) {
+    blockScreenshots = value;
     notifyListeners();
   }
 

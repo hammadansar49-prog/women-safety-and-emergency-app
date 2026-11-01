@@ -8,6 +8,7 @@ import android.os.Build
 import android.view.KeyEvent
 import android.app.KeyguardManager
 import android.content.Context
+import android.view.WindowManager
 
 class MainActivity : FlutterActivity() {
     companion object {
@@ -50,6 +51,21 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
                     else -> result.notImplemented()
+                }
+            }
+        // Privacy: keeps chats, PIN and SOS screens out of screenshots, screen
+        // recordings and the recent-apps preview.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "safeher/secure")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "set") {
+                    if (call.arguments == true) {
+                        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    } else {
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    }
+                    result.success(null)
+                } else {
+                    result.notImplemented()
                 }
             }
         val ch = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "safeher/shortcut")

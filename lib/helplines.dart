@@ -30,6 +30,23 @@ class HelplineList extends StatelessWidget {
     }
   }
 
+  /// Google Maps searches around the phone's own position; no API key.
+  Future<void> _near(BuildContext context, String what) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await launchUrl(
+      Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query='
+        '${Uri.encodeComponent('$what near me')}',
+      ),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!ok) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not open the map.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -44,6 +61,20 @@ class HelplineList extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
+        RowCard(
+          leading: const IconChip(Icons.place_outlined),
+          title: 'Nearest police station',
+          detail: 'Open the map around you',
+          trailing: Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+          onTap: () => _near(context, 'police station'),
+        ),
+        RowCard(
+          leading: const IconChip(Icons.local_hospital_outlined),
+          title: 'Nearest hospital',
+          detail: 'Open the map around you',
+          trailing: Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+          onTap: () => _near(context, 'hospital'),
+        ),
         for (final h in helplines)
           RowCard(
             leading: IconChip(h.icon),
