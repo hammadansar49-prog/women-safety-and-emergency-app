@@ -54,27 +54,47 @@ exports.addUsernameToFilter = onDocumentCreated('usernames/{name}', async (event
 // carries no location; the app fetches that itself once opened.
 const { getMessaging } = require('firebase-admin/messaging');
 
-exports.pushSosAlert = onDocumentCreated('sosAlerts/{id}', async (event) => {
-  const alert = event.data && event.data.data();
-  if (!alert || alert.status !== 'active') return;
-  const db = getFirestore();
-  const tokenDoc = await db.doc(`pushTokens/${alert.recipient}`).get();
-  const token = tokenDoc.exists ? tokenDoc.get('token') : null;
-  if (!token) return;
-  try {
-    await getMessaging().send({
-      token,
-      notification: {
-        title: `${alert.sender} needs help`,
-        body: 'Tap to see their live location.',
-      },
-      data: { type: 'sos', eventId: String(alert.eventId) },
-      android: { priority: 'high', notification: { channelId: 'sos_alerts' } },
-    });
-  } catch (e) {
-    // A dead token is removed so it is not tried again.
-    if (e.code === 'messaging/registration-token-not-registered') {
-      await tokenDoc.ref.delete();
+// Errors that are worth trying again; anything else would fail the same way.
+const TRANSIENT = new Set([
+  'messaging/internal-error',
+  'messaging/server-unavailable',
+  'messaging/quota-exceeded',
+  'messaging/unavailable',
+]);
+
+// retry: a transient failure rethrows so Cloud Functions runs this again. An
+// SOS that silently never arrives is the worst outcome this app can have.
+exports.pushSosAlert = onDocumentCreated(
+  { document: 'sosAlerts/{id}', retry: true },
+  async (event) => {
+    const alert = event.data && event.data.data();
+    if (!alert || alert.status !== 'active' || alert.pushedAt) return;
+    // A retried event older than 10 minutes is no longer useful as a wake-up.
+    if (Date.now() - Date.parse(event.time) > 10 * 60 * 1000) return;
+    const db = getFirestore();
+    const tokenDoc = await db.doc(`pushTokens/${alert.recipient}`).get();
+    const token = tokenDoc.exists ? tokenDoc.get('token') : null;
+    if (!token) return;
+    try {
+      await getMessaging().send({
+        token,
+        notification: {
+          title: `${alert.sender} needs help`,
+          body: 'Tap to see their live location.',
+        },
+        data: { type: 'sos', eventId: String(alert.eventId) },
+        android: { priority: 'high', ttl: 600000, notification: { channelId: 'sos_alerts' } },
+      });
+      // Recorded server side only, so the sender can see it was delivered to FCM.
+      await event.data.ref.update({ pushedAt: new Date().toISOString() });
+    } catch (e) {
+      // A dead token is removed so it is not tried again.
+      if (e.code === 'messaging/registration-token-not-registered') {
+        await tokenDoc.ref.delete();
+        return;
+      }
+      if (TRANSIENT.has(e.code)) throw e;
+      console.error('SOS push failed', alert.eventId, e.code || e);
     }
-  }
-});
+  },
+);

@@ -21,7 +21,7 @@ import 'ui/aurora_background.dart';
 import 'ui/glass.dart';
 import 'ui/motion.dart';
 import 'package:url_launcher/url_launcher.dart';
-
+import 'helplines.dart';
 import 'ui/design.dart';
 import 'ui/sos_map_card.dart';
 import 'ui/sos_slider.dart';
@@ -1495,6 +1495,8 @@ class _SafeHerShellState extends State<SafeHerShell>
               'No SOS buddies are ready. Open Buddies, add a friend, then star them in their chat menu. They must approve.',
             ),
           ),
+        const SizedBox(height: 22),
+        const HelplineList(),
       ],
     );
   }
