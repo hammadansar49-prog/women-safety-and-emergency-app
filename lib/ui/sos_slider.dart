@@ -272,7 +272,7 @@ class _SosSheetState extends State<SosSheet> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.sos_rounded, color: Colors.white, size: 18),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Text(
                   'Your SOS is live · Open',
                   style: TextStyle(
