@@ -7,7 +7,8 @@ import 'widget_test.dart' show settle, signUp;
 
 /// Signs up and opens Settings.
 Future<SocialController> openSettings(WidgetTester tester) async {
-  await tester.binding.setSurfaceSize(const Size(420, 900));
+  // Tall enough for the whole Settings list, so nothing sits under the nav bar.
+  await tester.binding.setSurfaceSize(const Size(420, 1400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final social = SocialController();
   addTearDown(social.dispose);
