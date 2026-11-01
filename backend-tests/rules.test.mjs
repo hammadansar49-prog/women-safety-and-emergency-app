@@ -1,25 +1,108 @@
-import {before,after,beforeEach,test} from 'node:test';
-import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
-import {initializeTestEnvironment,assertFails,assertSucceeds} from '@firebase/rules-unit-testing';
-import {doc,setDoc,getDoc,updateDoc,deleteDoc,writeBatch,serverTimestamp,collection,query,where,getDocs} from 'firebase/firestore';
-import {ref,uploadBytes} from 'firebase/storage';
+// Security-rules tests for the current schema. Run with the emulators:
+//   firebase emulators:exec --only firestore,storage --project demo-safeher "cd backend-tests && npm test"
+import { before, after, beforeEach, test } from 'node:test';
+import { readFileSync } from 'node:fs';
+import {
+  initializeTestEnvironment, assertFails, assertSucceeds,
+} from '@firebase/rules-unit-testing';
+import {
+  doc, setDoc, getDoc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs,
+} from 'firebase/firestore';
+import { ref, uploadBytes } from 'firebase/storage';
+
 let env;
-before(async()=>{env=await initializeTestEnvironment({projectId:'demo-safeher',firestore:{host:'127.0.0.1',port:8180,rules:readFileSync('../firestore.rules','utf8')},storage:{host:'127.0.0.1',port:9199,rules:readFileSync('../storage.rules','utf8')}})});
-after(async()=>{await env.cleanup()});
-beforeEach(async()=>{await env.clearFirestore()});
-const db=u=>env.authenticatedContext(u,{email:u+'@example.test'}).firestore();
-const stamp=()=>serverTimestamp();
-const pair={participants:['alice','bob'],fromId:'alice',toId:'bob',status:'pending'};
-async function seed(path,data){await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),path),data))}
-async function claim(uid,name=uid){const d=db(uid),b=writeBatch(d);b.set(doc(d,'usernames/'+name),{uid});b.set(doc(d,'profiles/'+uid),{uid,username:name,name:uid,photoPath:'',createdAt:stamp(),updatedAt:stamp()});return b.commit()}
-async function friends(){await seed('friendships/alice:bob',{...pair,status:'accepted',createdAt:new Date(),updatedAt:new Date()})}
-async function consent(){await seed('sosConsents/alice:bob',{senderId:'alice',recipientId:'bob',status:'approved',createdAt:new Date(),updatedAt:new Date()})}
-test('atomic profile claim works; anonymous discovery and private cross-account reads fail',async()=>{await assertSucceeds(claim('alice'));await assertSucceeds(getDoc(doc(db('bob'),'profiles/alice')));await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(),'profiles/alice')));await seed('users/alice',{email:'secret'});await assertFails(getDoc(doc(db('bob'),'users/alice')))});
-test('duplicate username race yields exactly one claimant; orphan claim and profile injection fail',async()=>{const results=await Promise.allSettled([claim('alice','same'),claim('bob','same')]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);await assertFails(setDoc(doc(db('eve'),'usernames/orphan'),{uid:'eve'}));await assertFails(claim('eve','Bad!'));await assertFails(setDoc(doc(db('eve'),'profiles/alice'),{email:'leak'}))});
-test('only recipient accepts friendship and identity cannot change',async()=>{await assertSucceeds(setDoc(doc(db('alice'),'friendships/alice:bob'),{...pair,createdAt:stamp(),updatedAt:stamp()}));await assertFails(updateDoc(doc(db('alice'),'friendships/alice:bob'),{status:'accepted',updatedAt:stamp()}));await assertFails(updateDoc(doc(db('eve'),'friendships/alice:bob'),{status:'accepted',updatedAt:stamp()}));await assertSucceeds(updateDoc(doc(db('bob'),'friendships/alice:bob'),{status:'accepted',updatedAt:stamp()}));await assertFails(updateDoc(doc(db('bob'),'friendships/alice:bob'),{fromId:'eve',updatedAt:stamp()}));await assertSucceeds(getDocs(query(collection(db('bob'),'friendships'),where('participants','array-contains','bob'))))});
-test('chat requires friendship, authentic sender and participant reads; messages immutable',async()=>{const m={participants:['alice','bob'],senderId:'alice',recipientId:'bob',text:'Hello',createdAt:stamp()};await assertFails(setDoc(doc(db('alice'),'messages/m'),m));await friends();await assertFails(setDoc(doc(db('eve'),'messages/m'),m));await assertSucceeds(setDoc(doc(db('alice'),'messages/m'),m));await assertFails(getDoc(doc(db('eve'),'messages/m')));await assertSucceeds(getDoc(doc(db('bob'),'messages/m')));await assertFails(updateDoc(doc(db('alice'),'messages/m'),{text:'changed'}));await assertFails(setDoc(doc(db('alice'),'messages/long'),{...m,text:'x'.repeat(2001)}))});
-test('SOS recipient controls consent; approved favorite becomes ineligible on revoke',async()=>{await friends();const c={senderId:'alice',recipientId:'bob',status:'pending',createdAt:stamp(),updatedAt:stamp()};await assertSucceeds(setDoc(doc(db('alice'),'sosConsents/alice:bob'),c));await assertFails(updateDoc(doc(db('alice'),'sosConsents/alice:bob'),{status:'approved',updatedAt:stamp()}));await assertFails(setDoc(doc(db('alice'),'users/alice/favorites/bob'),{recipientId:'bob',createdAt:stamp()}));await assertSucceeds(updateDoc(doc(db('bob'),'sosConsents/alice:bob'),{status:'approved',updatedAt:stamp()}));await assertSucceeds(setDoc(doc(db('alice'),'users/alice/favorites/bob'),{recipientId:'bob',createdAt:stamp()}));await assertSucceeds(deleteDoc(doc(db('bob'),'sosConsents/alice:bob')));await assertFails(setDoc(doc(db('alice'),'users/alice/favorites/bob'),{recipientId:'bob',createdAt:stamp()}))});
-test('SOS events are server-created; recipient visibility disappears when consent revoked',async()=>{await friends();await consent();await seed('sosEvents/e',{senderId:'alice',recipientIds:['bob'],status:'active',deliveryStatus:'queued',createdAt:new Date(),updatedAt:new Date()});await assertFails(setDoc(doc(db('alice'),'sosEvents/forged'),{senderId:'alice',recipientIds:['eve']}));await assertSucceeds(getDoc(doc(db('bob'),'sosEvents/e')));await assertFails(getDoc(doc(db('eve'),'sosEvents/e')));await assertFails(updateDoc(doc(db('alice'),'sosEvents/e'),{recipientIds:['eve']}));await assertSucceeds(updateDoc(doc(db('alice'),'sosEvents/e'),{status:'resolved',updatedAt:stamp()}));await deleteDoc(doc(db('bob'),'sosConsents/alice:bob'));await assertFails(getDoc(doc(db('bob'),'sosEvents/e')))});
-test('device tokens private to owner',async()=>{await assertSucceeds(setDoc(doc(db('alice'),'users/alice/devices/device'),{token:'test-token',platform:'web',updatedAt:stamp()}));await assertFails(getDoc(doc(db('bob'),'users/alice/devices/device')));await assertFails(setDoc(doc(db('bob'),'users/alice/devices/device'),{token:'steal',platform:'web',updatedAt:stamp()}))});
-test('avatar accepts bounded image from owner; rejects spoof, nonimage and oversize',async()=>{const image=new Uint8Array([1,2,3]);await assertSucceeds(uploadBytes(ref(env.authenticatedContext('alice').storage(),'avatars/alice/profile'),image,{contentType:'image/jpeg'}));await assertFails(uploadBytes(ref(env.authenticatedContext('bob').storage(),'avatars/alice/profile'),image,{contentType:'image/jpeg'}));await assertFails(uploadBytes(ref(env.authenticatedContext('alice').storage(),'avatars/alice/profile'),image,{contentType:'text/plain'}));await assertFails(uploadBytes(ref(env.authenticatedContext('alice').storage(),'avatars/alice/profile'),new Uint8Array(1024*1024+1),{contentType:'image/jpeg'}))});
+before(async () => {
+  env = await initializeTestEnvironment({
+    projectId: 'demo-safeher',
+    firestore: { host: '127.0.0.1', port: 8180, rules: readFileSync('../firestore.rules', 'utf8') },
+    storage: { host: '127.0.0.1', port: 9199, rules: readFileSync('../storage.rules', 'utf8') },
+  });
+});
+after(async () => env.cleanup());
+beforeEach(async () => {
+  await env.clearFirestore();
+  // uid "u_<name>" owns username "<name>".
+  for (const n of ['alice', 'bob', 'eve']) {
+    await seed(`users/u_${n}`, { username: n });
+    await seed(`profiles/${n}`, { uid: `u_${n}`, username: n, name: n, pub: '' });
+  }
+});
+
+const db = (name) => env.authenticatedContext(`u_${name}`).firestore();
+const anon = () => env.unauthenticatedContext().firestore();
+const seed = (path, data) =>
+  env.withSecurityRulesDisabled((c) => setDoc(doc(c.firestore(), path), data));
+const friends = () =>
+  seed('friendReqs/alice__bob', { from: 'alice', to: 'bob', status: 'accepted', createdAt: 1 });
+const approved = () =>
+  seed('sosLinks/alice__bob', { from: 'alice', to: 'bob', status: 'approved' });
+
+test('usernames: claim own valid name once; no listing, no takeover', async () => {
+  const a = env.authenticatedContext('u_new').firestore();
+  await assertSucceeds(setDoc(doc(a, 'usernames/newbie'), { uid: 'u_new', email: 'x@y.z', createdAt: 1 }));
+  await assertFails(setDoc(doc(a, 'usernames/Bad!'), { uid: 'u_new' }));
+  await assertFails(setDoc(doc(db('eve'), 'usernames/spoof'), { uid: 'u_alice' }));
+  await assertFails(updateDoc(doc(a, 'usernames/newbie'), { uid: 'u_eve' }));
+  await assertFails(getDocs(collection(a, 'usernames')));
+});
+
+test('profiles: signed-in get only; owner edits name/pub only', async () => {
+  await assertSucceeds(getDoc(doc(db('bob'), 'profiles/alice')));
+  await assertFails(getDoc(doc(anon(), 'profiles/alice')));
+  await assertSucceeds(updateDoc(doc(db('alice'), 'profiles/alice'), { name: 'Alice' }));
+  await assertFails(updateDoc(doc(db('eve'), 'profiles/alice'), { name: 'pwned' }));
+  await assertFails(updateDoc(doc(db('alice'), 'profiles/alice'), { uid: 'u_eve' }));
+});
+
+test('friend requests: only recipient accepts; strangers cannot read', async () => {
+  await assertSucceeds(setDoc(doc(db('alice'), 'friendReqs/alice__bob'),
+    { from: 'alice', to: 'bob', status: 'pending', createdAt: 1 }));
+  await assertFails(setDoc(doc(db('eve'), 'friendReqs/alice__eve'),
+    { from: 'alice', to: 'eve', status: 'pending', createdAt: 1 }));
+  await assertFails(updateDoc(doc(db('alice'), 'friendReqs/alice__bob'), { status: 'accepted' }));
+  await assertFails(getDoc(doc(db('eve'), 'friendReqs/alice__bob')));
+  await assertSucceeds(updateDoc(doc(db('bob'), 'friendReqs/alice__bob'), { status: 'accepted' }));
+});
+
+test('chat: friends only, ciphertext immutable', async () => {
+  const msg = { from: 'alice', to: 'bob', ct: 'sealed', createdAt: serverTimestamp() };
+  await assertFails(setDoc(doc(db('alice'), 'chats/alice__bob/messages/m1'), msg));
+  await friends();
+  await assertSucceeds(setDoc(doc(db('alice'), 'chats/alice__bob/messages/m1'), msg));
+  await assertFails(setDoc(doc(db('eve'), 'chats/alice__bob/messages/m2'), { ...msg, from: 'eve' }));
+  await assertFails(getDoc(doc(db('eve'), 'chats/alice__bob/messages/m1')));
+  await assertFails(updateDoc(doc(db('bob'), 'chats/alice__bob/messages/m1'), { ct: 'changed' }));
+  await assertSucceeds(updateDoc(doc(db('bob'), 'chats/alice__bob/messages/m1'), { readAt: 1 }));
+});
+
+test('SOS: alert only to an approved buddy; recipient cannot alter it', async () => {
+  const alert = { sender: 'alice', recipient: 'bob', eventId: 'e1', status: 'active', createdAt: 1 };
+  await friends();
+  await assertFails(setDoc(doc(db('alice'), 'sosAlerts/e1_bob'), alert));
+  await assertSucceeds(setDoc(doc(db('alice'), 'sosLinks/alice__bob'), { from: 'alice', to: 'bob', status: 'pending' }));
+  await assertFails(updateDoc(doc(db('alice'), 'sosLinks/alice__bob'), { status: 'approved' }));
+  await assertSucceeds(updateDoc(doc(db('bob'), 'sosLinks/alice__bob'), { status: 'approved' }));
+  await assertSucceeds(setDoc(doc(db('alice'), 'sosAlerts/e1_bob'), alert));
+  await assertSucceeds(getDoc(doc(db('bob'), 'sosAlerts/e1_bob')));
+  await assertFails(getDoc(doc(db('eve'), 'sosAlerts/e1_bob')));
+  await assertFails(updateDoc(doc(db('bob'), 'sosAlerts/e1_bob'), { status: 'resolved' }));
+  await assertSucceeds(updateDoc(doc(db('alice'), 'sosAlerts/e1_bob'), { status: 'resolved' }));
+  await assertFails(updateDoc(doc(db('alice'), 'sosAlerts/e1_bob'), { status: 'active' }));
+});
+
+test('push tokens: per-device docs writable by owner only, never readable', async () => {
+  const dev = 'pushTokens/alice/devices/0123456789abcdef0123456789abcdef';
+  const t = { token: 'tok', platform: 'android', updatedAt: 1 };
+  await assertSucceeds(setDoc(doc(db('alice'), dev), t));
+  await assertFails(setDoc(doc(db('eve'), dev), t));
+  await assertFails(setDoc(doc(db('alice'), 'pushTokens/alice/devices/NOT-A-HASH'), t));
+  await assertFails(getDoc(doc(db('alice'), dev)));
+  await assertSucceeds(deleteDoc(doc(db('alice'), dev)));
+});
+
+test('unknown collections and storage are denied', async () => {
+  await approved();
+  await assertFails(setDoc(doc(db('alice'), 'anything/x'), { a: 1 }));
+  const st = env.authenticatedContext('u_alice').storage();
+  await assertFails(uploadBytes(ref(st, 'avatars/alice'), new Uint8Array([1])));
+});
