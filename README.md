@@ -11,6 +11,7 @@ Flutter (Android + web) app backed by Firebase:
 - **Calls:** WebRTC audio/video with Firestore signaling.
 - **SOS:** countdown, approved-favourite "SOS buddies", live location by movement, siren / spoken alert, FCM push through the `pushSosAlert` Cloud Function.
 - **Safety extras:** silent SOS, shake to SOS, safe-walk check-in timer, SMS fallback with a maps link, one-tap Pakistan helplines (15, 1122, 1099, 115), nearest police/hospital, screenshot blocking.
+- **More safety:** buddy replies (Seen / On the way, auto-seen on open), reminders for unseen alerts, emergency (duress) PIN, live trip sharing, medical info sent with SOS, Urdu for the safety screens.
 - **Push:** every phone of a buddy is woken (`pushTokens/{name}/devices`), with retries.
 - **Backup:** client-side encrypted cloud backup (`backups/`).
 - **Security rules:** `firestore.rules`, `database.rules.json`, `storage.rules` (storage deny-all), tested in `backend-tests/`.
