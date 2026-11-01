@@ -23,6 +23,8 @@ import 'ui/motion.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'helplines.dart';
 import 'check_in.dart';
+import 'trip_card.dart';
+import 'medical_info.dart';
 import 'shake_detector.dart';
 import 'secure_window.dart';
 import 'ui/design.dart';
@@ -319,6 +321,7 @@ class _SafeHerShellState extends State<SafeHerShell>
   bool _needsRestore = false;
   Timer? _backupTimer;
   Timer? _checkInTimer;
+  final _tripTracker = LocationTracker();
   late final ShakeDetector _shake = ShakeDetector(
     onShake: () {
       if (!mounted || !social.signedIn || !social.guideSeen) return;
@@ -973,8 +976,24 @@ class _SafeHerShellState extends State<SafeHerShell>
     });
   }
 
-  /// Applies the shake and screenshot settings to the device.
+  /// Applies the shake and screenshot settings to the device, and keeps
+  /// the trip location stream in step with an active trip.
   void _syncDeviceSettings() {
+    final until = social.tripUntil;
+    if (until != null && !DateTime.now().isBefore(until)) {
+      social.endTrip();
+      return;
+    }
+    if (social.signedIn && social.onTrip) {
+      if (!_tripTracker.running) {
+        _tripTracker.start(
+          (fix) =>
+              social.updateTripLocation(fix.latitude, fix.longitude, fix.time),
+        );
+      }
+    } else if (_tripTracker.running) {
+      _tripTracker.stop();
+    }
     if (social.signedIn && social.shakeSos) {
       _shake.start();
     } else {
@@ -985,6 +1004,7 @@ class _SafeHerShellState extends State<SafeHerShell>
 
   /// A missed safe-walk check-in raises an SOS on the user's behalf.
   void _checkCheckIn() {
+    _syncDeviceSettings();
     final due = social.checkInDue;
     if (!mounted || due == null || DateTime.now().isBefore(due)) return;
     if (!social.signedIn || emergency.status != EmergencyStatus.idle) return;
@@ -1138,6 +1158,7 @@ class _SafeHerShellState extends State<SafeHerShell>
     social.removeListener(_syncDeviceSettings);
     social.removeListener(_openRequestedSos);
     _shake.stop();
+    _tripTracker.stop();
     _usernameChecker.dispose();
     WidgetsBinding.instance.removeObserver(this);
     shortcut.dispose();
@@ -1307,6 +1328,12 @@ class _SafeHerShellState extends State<SafeHerShell>
             PinLockScreen(
               social: social,
               onUnlocked: () => setState(() => _locked = false),
+              onDuress: () {
+                if (emergency.status == EmergencyStatus.idle &&
+                    social.eligibleRecipients.isNotEmpty) {
+                  _startSos(silent: true);
+                }
+              },
             ),
         ],
       );
@@ -1598,6 +1625,8 @@ class _SafeHerShellState extends State<SafeHerShell>
             ),
           ),
         const SizedBox(height: 22),
+        TripCard(social: social),
+        const SizedBox(height: 12),
         CheckInCard(social: social),
         const SizedBox(height: 12),
         const HelplineList(),
@@ -1977,6 +2006,38 @@ class _SafeHerShellState extends State<SafeHerShell>
             ),
           ),
         ),
+        RowCard(
+          leading: const IconChip(Icons.medical_information_outlined),
+          title: 'Medical info',
+          detail: social.medicalSummary.isEmpty
+              ? 'Blood group, allergies, medicines — sent with SOS'
+              : social.medicalSummary,
+          trailing: _chevron(),
+          onTap: () => Navigator.of(context).push(
+            SafeRoute<void>(builder: (_) => MedicalInfoScreen(social: social)),
+          ),
+        ),
+        if (social.hasPin)
+          RowCard(
+            leading: const IconChip(Icons.pin_outlined),
+            title: 'Emergency PIN',
+            detail: social.hasDuressPin
+                ? 'On. Opens SafeHer and silently sends SOS'
+                : 'A second PIN that opens SafeHer and silently sends SOS',
+            trailing: SoftSwitch(
+              value: social.hasDuressPin,
+              label: 'Emergency PIN',
+              onChanged: (on) {
+                if (!on) return social.clearDuressPin();
+                Navigator.of(context).push(
+                  SafeRoute<void>(
+                    builder: (_) =>
+                        PinSetupScreen(social: social, mode: PinMode.duress),
+                  ),
+                );
+              },
+            ),
+          ),
         RowCard(
           leading: const IconChip(Icons.logout_rounded),
           title: 'Sign out',

@@ -66,6 +66,9 @@ class CloudSocial {
   /// SOS ends so the final "ended here" fix still reaches them.
   final _sosOut = <String, List<String>>{};
   final _sosLastLoc = <String, ({DateTime at, double lat, double lng})>{};
+  List<String> _tripTo = const [];
+  String? _tripUntil;
+  ({DateTime at, double lat, double lng})? _tripLast;
 
   bool get running => _me != null;
 
@@ -273,6 +276,8 @@ class CloudSocial {
     _peers.clear();
     _sosOut.clear();
     _sosLastLoc.clear();
+    _tripTo = const [];
+    _tripLast = null;
     _inFlight.clear();
     _reqFrom = _reqTo = _linkFrom = _linkTo = null;
     // Offline Firestore writes can wait indefinitely. Local cancellation
@@ -389,7 +394,14 @@ class CloudSocial {
             .orderBy('createdAt', descending: true)
             .limit(20)
             .snapshots(includeMetadataChanges: true),
-        (s) => social.applyCloudAlerts([
+        (s) {
+          for (final d in s.docs) {
+            final medical = d.data()['medical'];
+            if (medical is String && medical.isNotEmpty) {
+              social.alertMedical[d.id] = medical;
+            }
+          }
+          social.applyCloudAlerts([
           for (final d in s.docs)
             (
               id: d.id,
@@ -405,8 +417,31 @@ class CloudSocial {
                 (d.data()['endedAt'] as String?) ?? '',
               ),
             ),
-        ]),
+          ]);
+        },
         message: 'Could not sync alerts. Check your connection.',
+      ),
+    );
+    // Trips buddies are sharing with this account.
+    _subs.add(
+      _listenRetrying(
+        () => _db
+            .collection('trips')
+            .where('recipient', isEqualTo: me)
+            .snapshots(),
+        (s) => social.applyCloudTrips([
+          for (final d in s.docs)
+            (
+              sender: d.data()['sender'] as String,
+              until:
+                  DateTime.tryParse((d.data()['until'] as String?) ?? '') ??
+                  DateTime.now(),
+              lat: (d.data()['lat'] as num?)?.toDouble(),
+              lng: (d.data()['lng'] as num?)?.toDouble(),
+              locAt: DateTime.tryParse((d.data()['locAt'] as String?) ?? ''),
+            ),
+        ]),
+        message: 'Could not sync trips. Check your connection.',
       ),
     );
     // Answers from buddies on this account's own active SOS. Equality
@@ -759,6 +794,44 @@ class CloudSocial {
         await _sosLocation(op);
       case 'sosEnd':
         await _sosEnd(op);
+      case 'tripStart':
+        _tripTo = op.text!.split(',').where((r) => r.isNotEmpty).toList();
+        _tripUntil = op.id;
+        _tripLast = null;
+        await Future.wait([
+          for (final r in _tripTo)
+            _db.collection('trips').doc('${me}__$r').set({
+              'sender': me,
+              'recipient': r,
+              'until': op.id,
+            }),
+        ]);
+      case 'tripLoc':
+        final tripParts = op.text!.split(',');
+        final tripLat = double.parse(tripParts[0]);
+        final tripLng = double.parse(tripParts[1]);
+        final tripNow = DateTime.now();
+        final tripPrev = _tripLast;
+        if (tripPrev != null && !sosFixIsWorthSending(tripPrev, tripNow, tripLat, tripLng)) return;
+        _tripLast = (at: tripNow, lat: tripLat, lng: tripLng);
+        await Future.wait([
+          for (final r in _tripTo)
+            // A merge, so a fix that overtakes the start still lands.
+            _db.collection('trips').doc('${me}__$r').set({
+              'sender': me,
+              'recipient': r,
+              'until': _tripUntil,
+              'lat': tripLat,
+              'lng': tripLng,
+              'locAt': tripParts[2],
+            }, SetOptions(merge: true)),
+        ]);
+      case 'tripEnd':
+        final tripTargets = _tripTo;
+        _tripTo = const [];
+        await Future.wait([
+          for (final r in tripTargets) _db.collection('trips').doc('${me}__$r').delete(),
+        ]);
       case 'sosRespond':
         // On this side the event id is the alert document's id.
         await _db.collection('sosAlerts').doc(op.id).update({
@@ -795,6 +868,8 @@ class CloudSocial {
           'eventId': event,
           'status': 'active',
           'createdAt': FieldValue.serverTimestamp(),
+          if (social.medicalSummary.isNotEmpty)
+            'medical': social.medicalSummary,
         }),
     ]);
   }

@@ -288,6 +288,8 @@ class SocialController extends ChangeNotifier {
     countdown = m['countdown'] ?? 5;
     silentSos = m['silentSos'] == true;
     shakeSos = m['shakeSos'] == true;
+    bloodGroup = m['bloodGroup'] as String?;
+    medicalNotes = (m['medicalNotes'] as String?) ?? '';
     blockScreenshots = m['blockScreenshots'] != false;
     checkInDue = DateTime.tryParse(m['checkInDue'] as String? ?? '');
     shortcutKey = m['shortcutKey'] == 'volumeDown' ? 'volumeDown' : 'volumeUp';
@@ -295,6 +297,7 @@ class SocialController extends ChangeNotifier {
     identityPub = m['idPub'] as String?;
     _pinSalt = m['pinSalt'] as String?;
     _pinHash = m['pinHash'] as String?;
+    _duressHash = m['duressHash'] as String?;
     guideSeen = m['guideSeen'] == true;
     _photos.addAll(Map<String, String>.from(m['photos']));
     _friendships.addAll(List<String>.from(m['friends']));
@@ -348,6 +351,10 @@ class SocialController extends ChangeNotifier {
   // --- PIN lock (per account; only a salted hash is kept) ------------------
   String? _pinSalt;
   String? _pinHash;
+
+  /// Emergency (duress) PIN: opens the app like the real PIN, and quietly
+  /// sends a silent SOS. Shares the real PIN's salt.
+  String? _duressHash;
   bool guideSeen = false;
 
   bool get hasPin => _pinHash != null;
@@ -359,14 +366,36 @@ class SocialController extends ChangeNotifier {
     final r = Random.secure();
     _pinSalt = base64Url.encode(List.generate(16, (_) => r.nextInt(256)));
     _pinHash = _pinDigest(_pinSalt!, pin);
+    // A new salt would break the emergency PIN; it is set again afterwards.
+    _duressHash = null;
     notifyListeners();
   }
 
   void clearPin() {
     _pinSalt = null;
     _pinHash = null;
+    _duressHash = null;
     notifyListeners();
   }
+
+  bool get hasDuressPin => _duressHash != null;
+
+  /// Returns false when there is no PIN lock, or the emergency PIN would be
+  /// the same as the real one.
+  bool setDuressPin(String pin) {
+    if (_pinSalt == null || checkPin(pin)) return false;
+    _duressHash = _pinDigest(_pinSalt!, pin);
+    notifyListeners();
+    return true;
+  }
+
+  void clearDuressPin() {
+    _duressHash = null;
+    notifyListeners();
+  }
+
+  bool checkDuressPin(String pin) =>
+      _duressHash != null && _pinDigest(_pinSalt!, pin) == _duressHash;
 
   bool checkPin(String pin) =>
       _pinHash != null && _pinDigest(_pinSalt!, pin) == _pinHash;
@@ -393,11 +422,14 @@ class SocialController extends ChangeNotifier {
     countdown = 5;
     silentSos = false;
     shakeSos = false;
+    bloodGroup = null;
+    medicalNotes = '';
     blockScreenshots = true;
     checkInDue = null;
     shortcutKey = 'volumeUp';
     _pinSalt = null;
     _pinHash = null;
+    _duressHash = null;
     identityPriv = null;
     identityPub = null;
     guideSeen = false;
@@ -505,6 +537,8 @@ class SocialController extends ChangeNotifier {
       'countdown': countdown,
       'silentSos': silentSos,
       'shakeSos': shakeSos,
+      'bloodGroup': bloodGroup,
+      'medicalNotes': medicalNotes,
       'blockScreenshots': blockScreenshots,
       'checkInDue': checkInDue?.toUtc().toIso8601String(),
       'shortcutKey': shortcutKey,
@@ -512,6 +546,7 @@ class SocialController extends ChangeNotifier {
       'idPub': identityPub,
       'pinSalt': _pinSalt,
       'pinHash': _pinHash,
+      'duressHash': _duressHash,
       'guideSeen': guideSeen,
       'photos': _photos,
       'profiles': [
@@ -579,6 +614,24 @@ class SocialController extends ChangeNotifier {
     silentSos = value;
     notifyListeners();
   }
+
+  /// Medical details sent with an SOS to approved buddies.
+  String? bloodGroup;
+  String medicalNotes = '';
+  void setMedicalInfo(String? blood, String notes) {
+    bloodGroup = blood;
+    medicalNotes = notes.trim();
+    notifyListeners();
+  }
+
+  /// One line for the SOS alert; empty when nothing was entered.
+  String get medicalSummary => [
+    if (bloodGroup != null) 'Blood group $bloodGroup',
+    if (medicalNotes.isNotEmpty) medicalNotes,
+  ].join('. ');
+
+  /// Medical info that arrived with an SOS this account received.
+  final Map<String, String> alertMedical = {};
 
   /// Shaking the phone hard three times starts an SOS (with countdown).
   bool shakeSos = false;
@@ -1376,6 +1429,75 @@ class SocialController extends ChangeNotifier {
     sosResponses
       ..clear()
       ..addAll(responses);
+    notifyListeners();
+  }
+
+  // --- Live trip sharing ---------------------------------------------------
+
+  /// When this account's shared trip ends on its own (null: no trip).
+  DateTime? tripUntil;
+  bool get onTrip => tripUntil != null && DateTime.now().isBefore(tripUntil!);
+
+  /// Shares this phone's live position with every approved SOS buddy until
+  /// [until] or [endTrip]. Returns false when no buddy has approved.
+  bool startTrip(Duration within) {
+    final to = eligibleRecipients.map((p) => p.id).toList();
+    if (to.isEmpty) return false;
+    tripUntil = DateTime.now().add(within);
+    _emit(
+      CloudOp(
+        'tripStart',
+        '',
+        id: tripUntil!.toUtc().toIso8601String(),
+        text: to.join(','),
+      ),
+    );
+    notifyListeners();
+    return true;
+  }
+
+  void updateTripLocation(double lat, double lng, DateTime at) {
+    if (tripUntil == null) return;
+    _emit(
+      CloudOp('tripLoc', '', text: '$lat,$lng,${at.toUtc().toIso8601String()}'),
+    );
+  }
+
+  void endTrip() {
+    if (tripUntil == null) return;
+    tripUntil = null;
+    _emit(const CloudOp('tripEnd', ''));
+    notifyListeners();
+  }
+
+  /// Trips buddies are sharing with this account right now.
+  List<
+    ({
+      String sender,
+      DateTime until,
+      double? lat,
+      double? lng,
+      DateTime? locAt,
+    })
+  >
+  buddyTrips = const [];
+
+  void applyCloudTrips(
+    List<
+      ({
+        String sender,
+        DateTime until,
+        double? lat,
+        double? lng,
+        DateTime? locAt,
+      })
+    >
+    trips,
+  ) {
+    buddyTrips = [
+      for (final t in trips)
+        if (DateTime.now().isBefore(t.until)) t,
+    ];
     notifyListeners();
   }
 

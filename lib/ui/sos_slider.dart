@@ -599,6 +599,14 @@ class _Active extends StatelessWidget {
             ],
           ),
         ],
+        if (recipients.isNotEmpty && responses.isEmpty) ...[
+          const SizedBox(height: 12),
+          Text(
+            'No buddy has opened it yet. SafeHer will remind them every 2 minutes.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall,
+          ),
+        ],
         if (onSms != null) ...[
           const SizedBox(height: 18),
           OutlinedPill(label: 'No internet? Text my location', onTap: onSms),

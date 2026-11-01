@@ -94,6 +94,25 @@ test('SOS: alert only to an approved buddy; recipient cannot alter it', async ()
   await assertFails(updateDoc(doc(db('alice'), 'sosAlerts/e1_bob'), { status: 'active' }));
 });
 
+test('trips: only to an approved buddy, visible to the pair only', async () => {
+  const t = { sender: 'alice', recipient: 'bob', until: '2099-01-01T00:00:00Z' };
+  await assertFails(setDoc(doc(db('alice'), 'trips/alice__bob'), t));
+  await approved();
+  await assertSucceeds(setDoc(doc(db('alice'), 'trips/alice__bob'), t));
+  await assertSucceeds(setDoc(doc(db('alice'), 'trips/alice__bob'), { ...t, lat: 1, lng: 2, locAt: 'x' }));
+  await assertSucceeds(getDoc(doc(db('bob'), 'trips/alice__bob')));
+  await assertFails(getDoc(doc(db('eve'), 'trips/alice__bob')));
+  await assertFails(setDoc(doc(db('eve'), 'trips/eve__bob'), { ...t, sender: 'eve' }));
+  await assertSucceeds(deleteDoc(doc(db('alice'), 'trips/alice__bob')));
+});
+
+test('SOS medical info is size-limited', async () => {
+  await approved();
+  const alert = { sender: 'alice', recipient: 'bob', eventId: 'e2', status: 'active', createdAt: 1 };
+  await assertSucceeds(setDoc(doc(db('alice'), 'sosAlerts/e2_bob'), { ...alert, medical: 'Blood group O+' }));
+  await assertFails(setDoc(doc(db('alice'), 'sosAlerts/e3_bob'), { ...alert, eventId: 'e3', medical: 'x'.repeat(401) }));
+});
+
 test('push tokens: per-device docs writable by owner only, never readable', async () => {
   const dev = 'pushTokens/alice/devices/0123456789abcdef0123456789abcdef';
   const t = { token: 'tok', platform: 'android', updatedAt: 1 };

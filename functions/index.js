@@ -1,5 +1,6 @@
 // SafeHer cloud functions. Deploying them needs the Blaze plan.
 const { onDocumentCreated } = require('firebase-functions/v2/firestore');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 
@@ -64,6 +65,47 @@ const TRANSIENT = new Set([
 
 // retry: a transient failure rethrows so Cloud Functions runs this again. An
 // SOS that silently never arrives is the worst outcome this app can have.
+// Sends one SOS notification to every phone of the alert's recipient.
+// Returns how many phones FCM accepted; throws if all failed transiently.
+async function pushToRecipient(alert, title, body) {
+  const db = getFirestore();
+  // Every phone of the recipient, plus the legacy single-token document.
+  const [legacy, devices] = await Promise.all([
+    db.doc(`pushTokens/${alert.recipient}`).get(),
+    db.collection(`pushTokens/${alert.recipient}/devices`).get(),
+  ]);
+  const targets = devices.docs.map((d) => ({ ref: d.ref, token: d.get('token') }));
+  if (legacy.exists && legacy.get('token')) {
+    targets.push({ ref: legacy.ref, token: legacy.get('token') });
+  }
+  let delivered = 0;
+  let transient = null;
+  await Promise.all(targets.map(async ({ ref, token }) => {
+    try {
+      await getMessaging().send({
+        token,
+        notification: { title, body },
+        data: { type: 'sos', eventId: String(alert.eventId) },
+        android: { priority: 'high', ttl: 600000, notification: { channelId: 'sos_alerts' } },
+      });
+      delivered++;
+    } catch (e) {
+      // A dead token is removed so it is not tried again.
+      if (e.code === 'messaging/registration-token-not-registered') {
+        await ref.delete();
+      } else if (TRANSIENT.has(e.code)) {
+        transient = e;
+      } else {
+        console.error('SOS push failed', alert.eventId, e.code || e);
+      }
+    }
+  }));
+  if (!delivered && transient) throw transient;
+  return delivered;
+}
+
+// retry: a transient failure rethrows so Cloud Functions runs this again. An
+// SOS that silently never arrives is the worst outcome this app can have.
 exports.pushSosAlert = onDocumentCreated(
   { document: 'sosAlerts/{id}', retry: true },
   async (event) => {
@@ -71,47 +113,47 @@ exports.pushSosAlert = onDocumentCreated(
     if (!alert || alert.status !== 'active' || alert.pushedAt) return;
     // A retried event older than 10 minutes is no longer useful as a wake-up.
     if (Date.now() - Date.parse(event.time) > 10 * 60 * 1000) return;
-    const db = getFirestore();
-    // Every phone of the recipient, plus the legacy single-token document.
-    const [legacy, devices] = await Promise.all([
-      db.doc(`pushTokens/${alert.recipient}`).get(),
-      db.collection(`pushTokens/${alert.recipient}/devices`).get(),
-    ]);
-    const targets = devices.docs.map((d) => ({ ref: d.ref, token: d.get('token') }));
-    if (legacy.exists && legacy.get('token')) {
-      targets.push({ ref: legacy.ref, token: legacy.get('token') });
-    }
-    if (!targets.length) return;
-    let delivered = 0;
-    let transient = null;
-    await Promise.all(targets.map(async ({ ref, token }) => {
-      try {
-        await getMessaging().send({
-          token,
-          notification: {
-            title: `${alert.sender} needs help`,
-            body: 'Tap to see their live location.',
-          },
-          data: { type: 'sos', eventId: String(alert.eventId) },
-          android: { priority: 'high', ttl: 600000, notification: { channelId: 'sos_alerts' } },
-        });
-        delivered++;
-      } catch (e) {
-        // A dead token is removed so it is not tried again.
-        if (e.code === 'messaging/registration-token-not-registered') {
-          await ref.delete();
-        } else if (TRANSIENT.has(e.code)) {
-          transient = e;
-        } else {
-          console.error('SOS push failed', alert.eventId, e.code || e);
-        }
-      }
-    }));
+    const delivered = await pushToRecipient(
+      alert,
+      `${alert.sender} needs help`,
+      'Tap to see their live location.',
+    );
     if (delivered) {
       // Recorded server side only, so the sender can see it reached FCM.
       await event.data.ref.update({ pushedAt: new Date().toISOString() });
-    } else if (transient) {
-      throw transient;
     }
   },
 );
+
+// --- Reminders ----------------------------------------------------------------
+// A buddy who has not opened an alert after 2 minutes is pushed again, up to
+// three times, two minutes apart.
+const REMIND_AFTER_MS = 2 * 60 * 1000;
+const MAX_REMINDERS = 3;
+
+exports.remindUnseenSos = onSchedule('every 1 minutes', async () => {
+  const db = getFirestore();
+  // Equality on one field: served by the automatic index.
+  const active = await db.collection('sosAlerts').where('status', '==', 'active').get();
+  const now = Date.now();
+  await Promise.all(active.docs.map(async (doc) => {
+    const alert = doc.data();
+    if (alert.response) return;
+    const reminders = alert.reminders || 0;
+    if (reminders >= MAX_REMINDERS) return;
+    const created = alert.createdAt && alert.createdAt.toMillis
+      ? alert.createdAt.toMillis()
+      : now;
+    if (now - created < REMIND_AFTER_MS * (reminders + 1)) return;
+    try {
+      await pushToRecipient(
+        alert,
+        `${alert.sender} still needs help`,
+        'You have not opened this SOS yet. Tap to see where they are.',
+      );
+    } catch (e) {
+      console.error('SOS reminder failed', alert.eventId, e.code || e);
+    }
+    await doc.ref.update({ reminders: reminders + 1 });
+  }));
+});

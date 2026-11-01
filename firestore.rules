@@ -158,7 +158,8 @@ service cloud.firestore {
       allow get, list: if request.auth != null
         && (resource.data.sender == me() || resource.data.recipient == me());
       allow create: if request.auth != null
-        && request.resource.data.keys().hasOnly(['sender', 'recipient', 'eventId', 'status', 'createdAt', 'lat', 'lng', 'locAt', 'endedAt'])
+        && request.resource.data.keys().hasOnly(['sender', 'recipient', 'eventId', 'status', 'createdAt', 'lat', 'lng', 'locAt', 'endedAt', 'medical'])
+        && request.resource.data.get('medical', '').size() <= 400
         && request.resource.data.sender == me()
         && request.resource.data.status == 'active'
         && alert == request.resource.data.eventId + '_' + request.resource.data.recipient
@@ -175,6 +176,20 @@ service cloud.firestore {
         && request.resource.data.response in ['seen', 'coming']
         && request.resource.data.respondedAt == request.time;
       allow delete: if request.auth != null && resource.data.sender == me();
+    }
+
+    // Live trip sharing ("walking home"): one document per (sender, buddy),
+    // only to a buddy who approved SOS, readable by those two only.
+    match /trips/{trip} {
+      allow get, list: if request.auth != null
+        && (resource.data.sender == me() || resource.data.recipient == me());
+      allow create, update: if request.auth != null
+        && request.resource.data.keys().hasOnly(['sender', 'recipient', 'until', 'lat', 'lng', 'locAt'])
+        && request.resource.data.sender == me()
+        && trip == request.resource.data.sender + '__' + request.resource.data.recipient
+        && get(/databases/$(database)/documents/sosLinks/$(trip)).data.status == 'approved';
+      allow delete: if request.auth != null
+        && (resource.data.sender == me() || resource.data.recipient == me());
     }
 
     // Audio/video calls and the SOS live view. A call is a signalling document

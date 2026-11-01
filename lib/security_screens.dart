@@ -207,10 +207,14 @@ class PinLockScreen extends StatefulWidget {
     super.key,
     required this.social,
     required this.onUnlocked,
+    this.onDuress,
   });
 
   final SocialController social;
   final VoidCallback onUnlocked;
+
+  /// The emergency PIN was entered: the app opens as usual and this fires.
+  final VoidCallback? onDuress;
 
   @override
   State<PinLockScreen> createState() => _PinLockScreenState();
@@ -230,6 +234,12 @@ class _PinLockScreenState extends State<PinLockScreen> {
   Future<String?> _check(String pin) async {
     if (widget.social.checkPin(pin)) {
       widget.onUnlocked();
+      return null;
+    }
+    if (widget.social.checkDuressPin(pin)) {
+      // Looks exactly like a normal unlock to whoever is watching.
+      widget.onUnlocked();
+      widget.onDuress?.call();
       return null;
     }
     _misses++;
@@ -310,7 +320,7 @@ class _PinLockScreenState extends State<PinLockScreen> {
   }
 }
 
-enum PinMode { create, disable }
+enum PinMode { create, disable, duress }
 
 /// Turn the PIN lock on (choose + confirm a PIN) or off (confirm the current
 /// one). The PIN is only ever stored salted and hashed, under this account.
@@ -326,14 +336,21 @@ class PinSetupScreen extends StatefulWidget {
 class _PinSetupScreenState extends State<PinSetupScreen> {
   String? _first;
 
-  bool get _creating => widget.mode == PinMode.create;
+  bool get _creating => widget.mode != PinMode.disable;
+  bool get _duress => widget.mode == PinMode.duress;
 
   String get _title => !_creating
       ? 'Turn off PIN lock'
+      : _duress
+      ? (_first == null ? 'Choose an emergency PIN' : 'Confirm emergency PIN')
       : (_first == null ? 'Choose a PIN' : 'Confirm your PIN');
 
   String get _subtitle => !_creating
       ? 'Enter your current PIN to turn it off.'
+      : _duress
+      ? (_first == null
+            ? 'Different from your PIN. It opens SafeHer normally and silently sends SOS.'
+            : 'Enter the same four digits again.')
       : (_first == null
             ? 'Four digits. You will enter it when SafeHer opens.'
             : 'Enter the same four digits again.');
@@ -353,7 +370,14 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
       setState(() => _first = null);
       return 'The PINs did not match. Start again.';
     }
-    widget.social.setPin(pin);
+    if (_duress) {
+      if (!widget.social.setDuressPin(pin)) {
+        setState(() => _first = null);
+        return 'Use a PIN different from your normal one.';
+      }
+    } else {
+      widget.social.setPin(pin);
+    }
     if (mounted) Navigator.of(context).pop();
     return null;
   }

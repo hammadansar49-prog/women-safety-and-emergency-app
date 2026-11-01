@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'call_controller.dart';
 import 'chat_screen.dart';
+import 'medical_info.dart';
 import 'social_controller.dart';
 import 'theme/tokens.dart';
 import 'ui/design.dart';
@@ -214,6 +215,10 @@ class _IncomingSosScreenState extends State<IncomingSosScreen>
                 ],
               ),
             ),
+            if (widget.social.alertMedical[event.id] != null) ...[
+              const SizedBox(height: 12),
+              MedicalInfoCard(text: widget.social.alertMedical[event.id]!),
+            ],
             const SizedBox(height: 16),
             if (active) ...[
               _Answer(
