@@ -1368,6 +1368,39 @@ class SocialController extends ChangeNotifier {
     return event;
   }
 
+  /// Buddy answers on the SOS this account is sending:
+  /// event id -> buddy id -> 'seen' | 'coming'. Live only, never saved.
+  final Map<String, Map<String, String>> sosResponses = {};
+
+  void applySosResponses(Map<String, Map<String, String>> responses) {
+    sosResponses
+      ..clear()
+      ..addAll(responses);
+    notifyListeners();
+  }
+
+  /// An SOS the user asked to open by tapping its notification.
+  String? pendingOpenSos;
+  void requestOpenSos(String eventId) {
+    pendingOpenSos = eventId;
+    notifyListeners();
+  }
+
+  /// This account's answer to an SOS it received.
+  final Map<String, String> myResponses = {};
+
+  /// Tells the sender this buddy has seen the alert, or is on the way.
+  void respondToSos(String eventId, String response) {
+    if (!['seen', 'coming'].contains(response)) return;
+    final event = _events.where((e) => e.id == eventId).firstOrNull;
+    if (event == null || event.senderId == currentUserId) return;
+    // "coming" is never downgraded to "seen".
+    if (myResponses[eventId] == 'coming') return;
+    myResponses[eventId] = response;
+    _emit(CloudOp('sosRespond', event.senderId, id: eventId, text: response));
+    notifyListeners();
+  }
+
   void finishSos(String eventId, {required bool cancelled}) {
     final index = _events.indexWhere((e) => e.id == eventId);
     if (index < 0) throw StateError('Unknown SOS event.');

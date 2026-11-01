@@ -168,6 +168,12 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lat', 'lng', 'locAt', 'endedAt'])
         && request.resource.data.status in ['active', 'cancelled', 'resolved']
         && (resource.data.status == 'active' || request.resource.data.status == resource.data.status);
+      // The buddy may only answer: "seen" or "coming", nothing else.
+      allow update: if request.auth != null
+        && resource.data.recipient == me()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['response', 'respondedAt'])
+        && request.resource.data.response in ['seen', 'coming']
+        && request.resource.data.respondedAt == request.time;
       allow delete: if request.auth != null && resource.data.sender == me();
     }
 

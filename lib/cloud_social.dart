@@ -92,7 +92,13 @@ class CloudSocial {
     social.onTyping = setTyping;
     _listen();
     unawaited(_startPresence(uid));
-    _push.register(me).catchError((Object _) {});
+    _push
+        .register(
+          me,
+          // The buddy's copy of an alert is "<event>_<buddy>".
+          onOpen: (event) => social.requestOpenSos('${event}_$me'),
+        )
+        .catchError((Object _) {});
     try {
       await _publishIdentity(
         me,
@@ -400,6 +406,29 @@ class CloudSocial {
               ),
             ),
         ]),
+        message: 'Could not sync alerts. Check your connection.',
+      ),
+    );
+    // Answers from buddies on this account's own active SOS. Equality
+    // filters only, so no composite index is needed.
+    _subs.add(
+      _listenRetrying(
+        () => _db
+            .collection('sosAlerts')
+            .where('sender', isEqualTo: me)
+            .where('status', isEqualTo: 'active')
+            .snapshots(),
+        (s) {
+          final out = <String, Map<String, String>>{};
+          for (final d in s.docs) {
+            final r = d.data()['response'] as String?;
+            final ev = d.data()['eventId'] as String?;
+            final to = d.data()['recipient'] as String?;
+            if (r == null || ev == null || to == null) continue;
+            (out[ev] ??= {})[to] = r;
+          }
+          social.applySosResponses(out);
+        },
         message: 'Could not sync alerts. Check your connection.',
       ),
     );
@@ -730,6 +759,12 @@ class CloudSocial {
         await _sosLocation(op);
       case 'sosEnd':
         await _sosEnd(op);
+      case 'sosRespond':
+        // On this side the event id is the alert document's id.
+        await _db.collection('sosAlerts').doc(op.id).update({
+          'response': op.text,
+          'respondedAt': FieldValue.serverTimestamp(),
+        });
       case 'approve':
         await _db.collection('sosLinks').doc('${peer}__$me').update({
           'status': 'approved',

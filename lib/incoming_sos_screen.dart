@@ -37,6 +37,7 @@ class _IncomingSosScreenState extends State<IncomingSosScreen>
     duration: const Duration(milliseconds: 1600),
   )..repeat();
   Timer? _tick;
+  bool _autoSeen = false;
 
   @override
   void initState() {
@@ -106,6 +107,16 @@ class _IncomingSosScreenState extends State<IncomingSosScreen>
       }
       final sender = widget.social.person(event.senderId);
       final active = event.status == LocalSosStatus.active;
+      // Opening the alert (from the notification or the app) tells the
+      // sender at once that it was seen. The event may only arrive after the
+      // screen opened, so this runs on the first build that has it.
+      if (active && !_autoSeen) {
+        _autoSeen = true;
+        final id = event.id;
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => widget.social.respondToSos(id, 'seen'),
+        );
+      }
       final hasPoint = event.lastLat != null && event.lastLng != null;
       return Scaffold(
         backgroundColor: Colors.transparent,
@@ -204,6 +215,14 @@ class _IncomingSosScreenState extends State<IncomingSosScreen>
               ),
             ),
             const SizedBox(height: 16),
+            if (active) ...[
+              _Answer(
+                response: widget.social.myResponses[event.id],
+                name: sender.name,
+                onAnswer: (r) => widget.social.respondToSos(event.id, r),
+              ),
+              const SizedBox(height: 10),
+            ],
             if (active && widget.calls != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
@@ -237,6 +256,48 @@ class _IncomingSosScreenState extends State<IncomingSosScreen>
       );
     },
   );
+}
+
+/// Lets the sender know someone saw the alert, or is on the way.
+class _Answer extends StatelessWidget {
+  const _Answer({
+    required this.response,
+    required this.name,
+    required this.onAnswer,
+  });
+  final String? response;
+  final String name;
+  final ValueChanged<String> onAnswer;
+
+  @override
+  Widget build(BuildContext context) {
+    if (response == 'coming') {
+      return Text(
+        '$name can see you are on your way.',
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.bodyMedium,
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        BerryButton(
+          label: "I'm on my way",
+          icon: Icons.directions_run_rounded,
+          onTap: () => onAnswer('coming'),
+        ),
+        const SizedBox(height: 10),
+        if (response == null)
+          OutlinedPill(label: 'I have seen this', onTap: () => onAnswer('seen'))
+        else
+          Text(
+            '$name can see you have seen this.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+      ],
+    );
+  }
 }
 
 class _StatusPill extends StatelessWidget {

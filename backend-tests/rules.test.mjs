@@ -86,6 +86,10 @@ test('SOS: alert only to an approved buddy; recipient cannot alter it', async ()
   await assertSucceeds(getDoc(doc(db('bob'), 'sosAlerts/e1_bob')));
   await assertFails(getDoc(doc(db('eve'), 'sosAlerts/e1_bob')));
   await assertFails(updateDoc(doc(db('bob'), 'sosAlerts/e1_bob'), { status: 'resolved' }));
+  // The buddy may answer, and only with an allowed answer.
+  await assertSucceeds(updateDoc(doc(db('bob'), 'sosAlerts/e1_bob'), { response: 'coming', respondedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(db('bob'), 'sosAlerts/e1_bob'), { response: 'lol', respondedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(db('eve'), 'sosAlerts/e1_bob'), { response: 'seen', respondedAt: serverTimestamp() }));
   await assertSucceeds(updateDoc(doc(db('alice'), 'sosAlerts/e1_bob'), { status: 'resolved' }));
   await assertFails(updateDoc(doc(db('alice'), 'sosAlerts/e1_bob'), { status: 'active' }));
 });

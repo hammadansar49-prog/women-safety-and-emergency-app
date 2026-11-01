@@ -203,9 +203,13 @@ class SosSheet extends StatefulWidget {
     required this.onCancel,
     required this.onSafe,
     this.onSms,
+    this.responses = const {},
   });
 
   final EmergencyStatus status;
+
+  /// Buddy name -> their answer ('seen' or 'coming').
+  final Map<String, String> responses;
   final int remaining;
   final int total;
   final List<String> recipients;
@@ -380,6 +384,7 @@ class _SosSheetState extends State<SosSheet> {
                                 recipients: widget.recipients,
                                 onSafe: widget.onSafe,
                                 onSms: widget.onSms,
+                                responses: widget.responses,
                                 onHide: () => setState(() => _hidden = true),
                               ),
                       ),
@@ -502,10 +507,12 @@ class _Active extends StatelessWidget {
     required this.onSafe,
     required this.onHide,
     this.onSms,
+    this.responses = const {},
   });
   final List<String> recipients;
   final VoidCallback onSafe;
   final VoidCallback? onSms;
+  final Map<String, String> responses;
 
   /// Steps out of the way without stopping the SOS, so the rest of the app —
   /// messaging another buddy, for one — stays reachable.
@@ -575,6 +582,17 @@ class _Active extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
+                      if (responses[recipients[i]] != null)
+                        Text(
+                          responses[recipients[i]] == 'coming'
+                              ? 'On the way'
+                              : 'Seen',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.success,
+                          ),
+                        ),
                     ],
                   ),
                 ),

@@ -14,6 +14,7 @@ class PushService {
   final FirebaseFirestore _db;
 
   StreamSubscription<String>? _refresh;
+  StreamSubscription<RemoteMessage>? _opened;
   String? _me;
   String? _token;
   int _generation = 0;
@@ -26,12 +27,28 @@ class PushService {
       .collection('devices')
       .doc(sha256.convert(utf8.encode(token)).toString().substring(0, 32));
 
-  Future<void> register(String me) async {
+  /// [onOpen] gets the sender's SOS event id when the user taps an SOS
+  /// notification, whether the app was closed, in the background or open.
+  Future<void> register(
+    String me, {
+    void Function(String eventId)? onOpen,
+  }) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
     final generation = ++_generation;
     _me = me;
     _token = null;
     final messaging = FirebaseMessaging.instance;
+    if (onOpen != null) {
+      void handle(RemoteMessage? m) {
+        final id = m?.data['eventId'];
+        if (m?.data['type'] == 'sos' && id is String && _me == me) onOpen(id);
+      }
+
+      await _opened?.cancel();
+      _opened = FirebaseMessaging.onMessageOpenedApp.listen(handle);
+      handle(await messaging.getInitialMessage());
+      if (_me != me || _generation != generation) return;
+    }
     final settings = await messaging.requestPermission();
     if (_me != me || _generation != generation) return;
     if (settings.authorizationStatus == AuthorizationStatus.denied) return;
@@ -67,6 +84,8 @@ class PushService {
   /// Stops this phone receiving the account's alerts (sign out).
   Future<void> unregister() async {
     ++_generation;
+    await _opened?.cancel();
+    _opened = null;
     final refresh = _refresh;
     final me = _me;
     final token = _token;

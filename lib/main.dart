@@ -695,6 +695,7 @@ class _SafeHerShellState extends State<SafeHerShell>
     }
     emergency.addListener(_syncEmergency);
     social.addListener(_syncDeviceSettings);
+    social.addListener(_openRequestedSos);
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncDeviceSettings());
     _checkInTimer = Timer.periodic(
       const Duration(seconds: 15),
@@ -951,6 +952,27 @@ class _SafeHerShellState extends State<SafeHerShell>
     }
   }
 
+  /// A tapped SOS notification opens that alert straight away; opening it
+  /// tells the sender it was seen.
+  void _openRequestedSos() {
+    final id = social.pendingOpenSos;
+    if (id == null || !mounted) return;
+    social.pendingOpenSos = null;
+    _sounder.stop();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).push(
+        SafeRoute<void>(
+          builder: (_) => IncomingSosScreen(
+            social: social,
+            eventId: id,
+            calls: calls,
+          ),
+        ),
+      );
+    });
+  }
+
   /// Applies the shake and screenshot settings to the device.
   void _syncDeviceSettings() {
     if (social.signedIn && social.shakeSos) {
@@ -1114,6 +1136,7 @@ class _SafeHerShellState extends State<SafeHerShell>
     _backupTimer?.cancel();
     _checkInTimer?.cancel();
     social.removeListener(_syncDeviceSettings);
+    social.removeListener(_openRequestedSos);
     _shake.stop();
     _usernameChecker.dispose();
     WidgetsBinding.instance.removeObserver(this);
@@ -1271,6 +1294,11 @@ class _SafeHerShellState extends State<SafeHerShell>
             onCancel: () => _finishSos(cancelled: true),
             onSafe: () => _finishSos(cancelled: false),
             onSms: _smsLocation,
+            responses: {
+              for (final e
+                  in (social.sosResponses[activeEventId] ?? const {}).entries)
+                social.person(e.key).name: e.value,
+            },
           ),
           // The app draws the call overlay above the Navigator; a shell on
           // its own (tests) still needs one here.
