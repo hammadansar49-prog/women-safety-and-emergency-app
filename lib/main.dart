@@ -25,6 +25,7 @@ import 'helplines.dart';
 import 'check_in.dart';
 import 'trip_card.dart';
 import 'medical_info.dart';
+import 'l10n.dart';
 import 'shake_detector.dart';
 import 'secure_window.dart';
 import 'ui/design.dart';
@@ -1171,6 +1172,7 @@ class _SafeHerShellState extends State<SafeHerShell>
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: Listenable.merge([emergency, social]),
     builder: (context, _) {
+      appLanguage = social.language;
       // Not signed in → the auth sub-flow.
       if (!social.signedIn) {
         switch (_stage) {
@@ -1514,7 +1516,7 @@ class _SafeHerShellState extends State<SafeHerShell>
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 290),
                 child: Text(
-                  'Walk tall. Your circle is awake.',
+                  tr('Walk tall. Your circle is awake.'),
                   style: theme.textTheme.headlineLarge?.copyWith(
                     fontSize: 34,
                     height: 1.08,
@@ -1531,7 +1533,7 @@ class _SafeHerShellState extends State<SafeHerShell>
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 270),
                 child: Text(
-                  'One slide tells your trusted buddies where you are.',
+                  tr('One slide tells your trusted buddies where you are.'),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: AppColors.light
                         ? const Color(0xFF6A3A52)
@@ -1554,7 +1556,7 @@ class _SafeHerShellState extends State<SafeHerShell>
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Your SOS buddies',
+              tr('Your SOS buddies'),
               style: theme.textTheme.titleMedium?.copyWith(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
@@ -1563,7 +1565,7 @@ class _SafeHerShellState extends State<SafeHerShell>
             GestureDetector(
               onTap: _openSosBuddies,
               child: Text(
-                'Manage',
+                tr('Manage'),
                 style: TextStyle(
                   color: AppColors.accent,
                   fontWeight: FontWeight.w700,
@@ -1945,6 +1947,12 @@ class _SafeHerShellState extends State<SafeHerShell>
           selected: widget.themeMode,
           onChanged: (value) => widget.onThemeChanged?.call(value),
         ),
+        SectionLabel(tr('Language')),
+        _Segments<String>(
+          options: languages,
+          selected: social.language,
+          onChanged: social.setLanguage,
+        ),
         const SectionLabel('Safety'),
         RowCard(
           leading: const IconChip(Icons.verified_user_outlined),
@@ -2008,7 +2016,7 @@ class _SafeHerShellState extends State<SafeHerShell>
         ),
         RowCard(
           leading: const IconChip(Icons.medical_information_outlined),
-          title: 'Medical info',
+          title: tr('Medical info'),
           detail: social.medicalSummary.isEmpty
               ? 'Blood group, allergies, medicines — sent with SOS'
               : social.medicalSummary,
@@ -2020,7 +2028,7 @@ class _SafeHerShellState extends State<SafeHerShell>
         if (social.hasPin)
           RowCard(
             leading: const IconChip(Icons.pin_outlined),
-            title: 'Emergency PIN',
+            title: tr('Emergency PIN'),
             detail: social.hasDuressPin
                 ? 'On. Opens SafeHer and silently sends SOS'
                 : 'A second PIN that opens SafeHer and silently sends SOS',
@@ -2091,7 +2099,7 @@ class _SafeHerShellState extends State<SafeHerShell>
                   listenable: social,
                   builder: (context, _) => RowCard(
                     leading: const IconChip(Icons.visibility_off_outlined),
-                    title: 'Silent SOS',
+                    title: tr('Silent SOS'),
                     detail:
                         'The volume shortcut sends SOS at once, with no countdown or alarm on screen. Repeat the presses to stop it.',
                     trailing: SoftSwitch(
@@ -2105,7 +2113,7 @@ class _SafeHerShellState extends State<SafeHerShell>
                   listenable: social,
                   builder: (context, _) => RowCard(
                     leading: const IconChip(Icons.vibration_rounded),
-                    title: 'Shake to SOS',
+                    title: tr('Shake to SOS'),
                     detail:
                         'Shake the phone hard three times while SafeHer is open to start the SOS countdown.',
                     trailing: SoftSwitch(
@@ -2119,7 +2127,7 @@ class _SafeHerShellState extends State<SafeHerShell>
                   listenable: social,
                   builder: (context, _) => RowCard(
                     leading: const IconChip(Icons.screenshot_monitor_outlined),
-                    title: 'Block screenshots',
+                    title: tr('Block screenshots'),
                     detail:
                         'Hides chats and SOS screens from screenshots, screen recording and the recent-apps view.',
                     trailing: SoftSwitch(

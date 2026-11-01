@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import 'l10n.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'social_controller.dart';
@@ -18,8 +20,8 @@ class TripCard extends StatelessWidget {
     final within = Duration(minutes: minutes);
     if (!social.startTrip(within)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Add an SOS buddy who has approved you first.'),
+        SnackBar(
+          content: Text(tr('Add an SOS buddy who has approved you first.')),
         ),
       );
       return;
@@ -44,9 +46,9 @@ class TripCard extends StatelessWidget {
           for (final t in social.buddyTrips)
             RowCard(
               leading: const IconChip(Icons.directions_walk_rounded),
-              title: '${social.person(t.sender).name} is on the way',
+              title: '${social.person(t.sender).name} ${tr('is on the way')}',
               detail: t.lat == null
-                  ? 'Waiting for their location'
+                  ? tr('Waiting for their location')
                   : 'Until ${TimeOfDay.fromDateTime(t.until.toLocal()).format(context)} · tap for map',
               trailing: Icon(
                 Icons.chevron_right_rounded,
@@ -81,7 +83,7 @@ class TripCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Share my trip',
+                            tr('Share my trip'),
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
@@ -89,8 +91,8 @@ class TripCard extends StatelessWidget {
                           ),
                           Text(
                             until == null
-                                ? 'Buddies see you live until you arrive.'
-                                : 'Sharing live until ${TimeOfDay.fromDateTime(until).format(context)}',
+                                ? tr('Buddies see you live until you arrive.')
+                                : '${tr('Sharing live until')} ${TimeOfDay.fromDateTime(until).format(context)}',
                             style: theme.textTheme.bodySmall?.copyWith(
                               fontSize: 12,
                             ),
@@ -108,7 +110,7 @@ class TripCard extends StatelessWidget {
                     children: [
                       for (final e in _options.entries)
                         PillButton(
-                          label: e.value,
+                          label: tr(e.value),
                           tone: (AppColors.tint, AppColors.textMuted),
                           onTap: () => _start(context, e.key),
                         ),
@@ -116,7 +118,7 @@ class TripCard extends StatelessWidget {
                   )
                 else
                   PillButton(
-                    label: "I've arrived",
+                    label: tr("I've arrived"),
                     filled: true,
                     onTap: _arrived,
                   ),

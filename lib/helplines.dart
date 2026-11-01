@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import 'l10n.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'theme/tokens.dart';
@@ -42,7 +44,7 @@ class HelplineList extends StatelessWidget {
     );
     if (!ok) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Could not open the map.')),
+        SnackBar(content: Text(tr('Could not open the map.'))),
       );
     }
   }
@@ -54,7 +56,7 @@ class HelplineList extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Emergency helplines',
+          tr('Emergency helplines'),
           style: theme.textTheme.titleMedium?.copyWith(
             fontSize: 14,
             fontWeight: FontWeight.w700,
@@ -63,23 +65,23 @@ class HelplineList extends StatelessWidget {
         const SizedBox(height: 12),
         RowCard(
           leading: const IconChip(Icons.place_outlined),
-          title: 'Nearest police station',
-          detail: 'Open the map around you',
+          title: tr('Nearest police station'),
+          detail: tr('Open the map around you'),
           trailing: Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
           onTap: () => _near(context, 'police station'),
         ),
         RowCard(
           leading: const IconChip(Icons.local_hospital_outlined),
-          title: 'Nearest hospital',
-          detail: 'Open the map around you',
+          title: tr('Nearest hospital'),
+          detail: tr('Open the map around you'),
           trailing: Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
           onTap: () => _near(context, 'hospital'),
         ),
         for (final h in helplines)
           RowCard(
             leading: IconChip(h.icon),
-            title: h.name,
-            detail: 'Call ${h.number}',
+            title: tr(h.name),
+            detail: '${tr('Call')} ${h.number}',
             trailing: Icon(Icons.call, color: AppColors.accent),
             onTap: () => _dial(context, h.number),
           ),

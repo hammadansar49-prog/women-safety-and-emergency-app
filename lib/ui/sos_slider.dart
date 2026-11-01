@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../l10n.dart';
+
 import '../emergency_controller.dart';
 import '../theme/tokens.dart';
 import 'design.dart';
@@ -121,7 +123,7 @@ class _SlideToSosState extends State<SlideToSos> {
                         child: Text(
                           widget.ready
                               ? widget.label
-                              : 'Add an SOS buddy first',
+                              : tr('Add an SOS buddy first'),
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 14,
@@ -141,7 +143,7 @@ class _SlideToSosState extends State<SlideToSos> {
                   top: 6,
                   child: Semantics(
                     button: true,
-                    label: 'Slide to send SOS',
+                    label: tr('Slide to send SOS'),
                     child: GestureDetector(
                       onTap: () => _complete(travel),
                       onHorizontalDragStart: (_) =>
@@ -270,7 +272,7 @@ class _SosSheetState extends State<SosSheet> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.sos_rounded, color: Colors.white, size: 18),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 Text(
                   'Your SOS is live · Open',
                   style: TextStyle(
@@ -421,7 +423,7 @@ class _Countdown extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          'SOS STARTING',
+          tr('SOS STARTING'),
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
@@ -430,7 +432,7 @@ class _Countdown extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        Text('Sending your alert', style: theme.textTheme.headlineMedium),
+        Text(tr('Sending your alert'), style: theme.textTheme.headlineMedium),
         const SizedBox(height: 22),
         SizedBox(
           width: 170,
@@ -462,7 +464,7 @@ class _Countdown extends StatelessWidget {
           style: theme.textTheme.bodyMedium,
         ),
         const SizedBox(height: 20),
-        OutlinedPill(label: 'Cancel', onTap: onCancel),
+        OutlinedPill(label: tr('Cancel'), onTap: onCancel),
       ],
     );
   }
@@ -545,13 +547,14 @@ class _Active extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        Text('SOS is active', style: theme.textTheme.headlineMedium),
+        Text(tr('SOS is active'), style: theme.textTheme.headlineMedium),
         const SizedBox(height: 8),
         Text(
           recipients.isEmpty
-              ? 'Your live location is being tracked on this phone.'
-              : 'Your live location, camera and microphone are going to your '
-                    'SOS buddies right now.',
+              ? tr('Your live location is being tracked on this phone.')
+              : tr(
+                  'Your live location, camera and microphone are going to your SOS buddies right now.',
+                ),
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium,
         ),
@@ -577,7 +580,7 @@ class _Active extends StatelessWidget {
                       const SizedBox(height: 6),
                       Text(
                         recipients[i],
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
@@ -585,8 +588,8 @@ class _Active extends StatelessWidget {
                       if (responses[recipients[i]] != null)
                         Text(
                           responses[recipients[i]] == 'coming'
-                              ? 'On the way'
-                              : 'Seen',
+                              ? tr('On the way')
+                              : tr('Seen'),
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
@@ -602,14 +605,14 @@ class _Active extends StatelessWidget {
         if (recipients.isNotEmpty && responses.isEmpty) ...[
           const SizedBox(height: 12),
           Text(
-            'No buddy has opened it yet. SafeHer will remind them every 2 minutes.',
+            tr('No buddy has opened it yet. SafeHer will remind them every 2 minutes.'),
             textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall,
           ),
         ],
         if (onSms != null) ...[
           const SizedBox(height: 18),
-          OutlinedPill(label: 'No internet? Text my location', onTap: onSms),
+          OutlinedPill(label: tr('No internet? Text my location'), onTap: onSms),
         ],
         const SizedBox(height: 22),
         Pressable(
@@ -624,7 +627,7 @@ class _Active extends StatelessWidget {
               color: AppColors.light ? const Color(0xFF35162B) : AppColors.text,
             ),
             child: Text(
-              'I am safe · End SOS',
+              tr('I am safe · End SOS'),
               style: TextStyle(
                 color: AppColors.light ? const Color(0xFFFFF7F3) : AppColors.bg,
                 fontWeight: FontWeight.w800,
@@ -641,7 +644,7 @@ class _Active extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
             child: Text(
-              'Use the app · SOS keeps running',
+              tr('Use the app · SOS keeps running'),
               style: TextStyle(
                 color: AppColors.textMuted,
                 fontWeight: FontWeight.w700,

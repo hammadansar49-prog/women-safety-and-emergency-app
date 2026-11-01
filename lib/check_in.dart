@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'l10n.dart';
+
 import 'social_controller.dart';
 import 'theme/tokens.dart';
 import 'ui/design.dart';
@@ -45,7 +47,7 @@ class CheckInCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Safe-walk check-in',
+                        tr('Safe-walk check-in'),
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
@@ -53,8 +55,8 @@ class CheckInCard extends StatelessWidget {
                       ),
                       Text(
                         due == null
-                            ? 'SOS starts if you do not check in on time.'
-                            : 'Check in by ${TimeOfDay.fromDateTime(due).format(context)} · ${_left(due)}',
+                            ? tr('SOS starts if you do not check in on time.')
+                            : '${tr('Check in by')} ${TimeOfDay.fromDateTime(due).format(context)} · ${_left(due)}',
                         style: theme.textTheme.bodySmall?.copyWith(
                           fontSize: 12,
                         ),
@@ -72,7 +74,7 @@ class CheckInCard extends StatelessWidget {
                 children: [
                   for (final e in _options.entries)
                     PillButton(
-                      label: e.value,
+                      label: tr(e.value),
                       tone: (AppColors.tint, AppColors.textMuted),
                       onTap: () => social.setCheckIn(Duration(minutes: e.key)),
                     ),
@@ -84,12 +86,12 @@ class CheckInCard extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   PillButton(
-                    label: "I'm safe",
+                    label: tr("I'm safe"),
                     filled: true,
                     onTap: () => social.setCheckIn(null),
                   ),
                   PillButton(
-                    label: '+15 min',
+                    label: tr('+15 min'),
                     tone: (AppColors.tint, AppColors.textMuted),
                     onTap: () => social.setCheckIn(
                       due.difference(DateTime.now()) +

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'l10n.dart';
+
 import 'social_controller.dart';
 import 'theme/tokens.dart';
 import 'ui/design.dart';
@@ -43,15 +45,15 @@ class _MedicalInfoScreenState extends State<MedicalInfoScreen> {
           children: [
             HeaderBack(onTap: () => Navigator.of(context).maybePop()),
             const SizedBox(height: 14),
-            const HeaderTitle(
-              'Medical info',
-              subtitle: 'Shared with your buddies only during an SOS.',
+            HeaderTitle(
+              tr('Medical info'),
+              subtitle: tr('Shared with your buddies only during an SOS.'),
               size: 28,
             ),
           ],
         ),
         children: [
-          const SectionLabel('Blood group'),
+          SectionLabel(tr('Blood group')),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -66,7 +68,7 @@ class _MedicalInfoScreenState extends State<MedicalInfoScreen> {
             ],
           ),
           const SizedBox(height: 18),
-          const SectionLabel('Allergies, medicines, conditions'),
+          SectionLabel(tr('Allergies, medicines, conditions')),
           TextField(
             controller: _notes,
             maxLines: 4,
@@ -78,11 +80,11 @@ class _MedicalInfoScreenState extends State<MedicalInfoScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Leave empty to share nothing.',
+            tr('Leave empty to share nothing.'),
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 18),
-          BerryButton(label: 'Save', onTap: _save),
+          BerryButton(label: tr('Save'), onTap: _save),
         ],
       ),
     );
@@ -112,7 +114,7 @@ class MedicalInfoCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Medical info',
+                tr('Medical info'),
                 style: Theme.of(
                   context,
                 ).textTheme.titleMedium?.copyWith(fontSize: 15),

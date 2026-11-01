@@ -288,6 +288,7 @@ class SocialController extends ChangeNotifier {
     countdown = m['countdown'] ?? 5;
     silentSos = m['silentSos'] == true;
     shakeSos = m['shakeSos'] == true;
+    language = m['language'] == 'ur' ? 'ur' : 'en';
     bloodGroup = m['bloodGroup'] as String?;
     medicalNotes = (m['medicalNotes'] as String?) ?? '';
     blockScreenshots = m['blockScreenshots'] != false;
@@ -422,6 +423,7 @@ class SocialController extends ChangeNotifier {
     countdown = 5;
     silentSos = false;
     shakeSos = false;
+    language = 'en';
     bloodGroup = null;
     medicalNotes = '';
     blockScreenshots = true;
@@ -537,6 +539,7 @@ class SocialController extends ChangeNotifier {
       'countdown': countdown,
       'silentSos': silentSos,
       'shakeSos': shakeSos,
+      'language': language,
       'bloodGroup': bloodGroup,
       'medicalNotes': medicalNotes,
       'blockScreenshots': blockScreenshots,
@@ -612,6 +615,13 @@ class SocialController extends ChangeNotifier {
   bool silentSos = false;
   void setSilentSos(bool value) {
     silentSos = value;
+    notifyListeners();
+  }
+
+  /// 'en' or 'ur'.
+  String language = 'en';
+  void setLanguage(String value) {
+    language = value == 'ur' ? 'ur' : 'en';
     notifyListeners();
   }
 

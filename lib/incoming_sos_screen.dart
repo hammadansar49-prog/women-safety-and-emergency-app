@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import 'l10n.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'call_controller.dart';
@@ -67,7 +69,7 @@ class _IncomingSosScreenState extends State<IncomingSosScreen>
     final ok = await launchUrl(Uri(scheme: 'tel', path: '15'));
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open the phone dialer.')),
+        SnackBar(content: Text(tr('Could not open the phone dialer.'))),
       );
     }
   }
@@ -101,7 +103,7 @@ class _IncomingSosScreenState extends State<IncomingSosScreen>
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: Center(
-            child: Text('This alert is no longer available.',
+            child: Text(tr('This alert is no longer available.'),
                 style: theme.textTheme.bodyLarge),
           ),
         );
@@ -163,8 +165,8 @@ class _IncomingSosScreenState extends State<IncomingSosScreen>
               const SizedBox(height: 2),
               Text(
                 active
-                    ? '${sender.name} needs help'
-                    : '${sender.name} ended the SOS',
+                    ? '${sender.name} ${tr('needs help')}'
+                    : '${sender.name} ${tr('ended the SOS')}',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.headlineMedium,
               ),
@@ -192,7 +194,7 @@ class _IncomingSosScreenState extends State<IncomingSosScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          active ? 'Last known location' : 'Ended here',
+                          active ? tr('Last known location') : tr('Ended here'),
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontSize: 15,
                           ),
@@ -201,7 +203,7 @@ class _IncomingSosScreenState extends State<IncomingSosScreen>
                         Text(
                           hasPoint
                               ? '${event.lastLat!.toStringAsFixed(5)}, ${event.lastLng!.toStringAsFixed(5)}'
-                              : 'Location unavailable. Waiting for a connection.',
+                              : tr('Location unavailable. Waiting for a connection.'),
                           style: theme.textTheme.bodySmall,
                         ),
                       ],
@@ -209,7 +211,7 @@ class _IncomingSosScreenState extends State<IncomingSosScreen>
                   ),
                   if (hasPoint)
                     PillButton(
-                      label: 'Map',
+                      label: tr('Map'),
                       onTap: () => _openMap(event.lastLat!, event.lastLng!),
                     ),
                 ],
@@ -232,14 +234,14 @@ class _IncomingSosScreenState extends State<IncomingSosScreen>
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: BerryButton(
-                  label: 'Watch live camera',
+                  label: tr('Watch live camera'),
                   icon: Icons.videocam_rounded,
                   // On this side the event id is already the sender's event
                   // plus this account, which is exactly the live stream's id.
                   onTap: () => _watch(event.id),
                 ),
               ),
-            BerryButton(label: 'Call 15', onTap: _call),
+            BerryButton(label: tr('Call 15'), onTap: _call),
             const SizedBox(height: 10),
             OutlinedPill(
               label: 'Message ${sender.name}',
@@ -252,7 +254,7 @@ class _IncomingSosScreenState extends State<IncomingSosScreen>
             ),
             const SizedBox(height: 14),
             Text(
-              'SafeHer only opens your phone dialer. You choose whether to call.',
+              tr('SafeHer only opens your phone dialer. You choose whether to call.'),
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall,
             ),
@@ -287,13 +289,13 @@ class _Answer extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         BerryButton(
-          label: "I'm on my way",
+          label: tr("I'm on my way"),
           icon: Icons.directions_run_rounded,
           onTap: () => onAnswer('coming'),
         ),
         const SizedBox(height: 10),
         if (response == null)
-          OutlinedPill(label: 'I have seen this', onTap: () => onAnswer('seen'))
+          OutlinedPill(label: tr('I have seen this'), onTap: () => onAnswer('seen'))
         else
           Text(
             '$name can see you have seen this.',
@@ -319,7 +321,7 @@ class _StatusPill extends StatelessWidget {
           : (AppColors.light ? Colors.white : AppColors.surface),
     ),
     child: Text(
-      active ? 'LIVE' : 'ENDED',
+      active ? tr('LIVE') : tr('ENDED'),
       style: TextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w800,
