@@ -10,6 +10,8 @@ Flutter (Android + web) app backed by Firebase:
 - **Social:** friend requests, end-to-end encrypted chat (photos, voice notes, shared places), read receipts, presence via Realtime Database.
 - **Calls:** WebRTC audio/video with Firestore signaling.
 - **SOS:** countdown, approved-favourite "SOS buddies", live location by movement, siren / spoken alert, FCM push through the `pushSosAlert` Cloud Function.
+- **Safety extras:** silent SOS, shake to SOS, safe-walk check-in timer, SMS fallback with a maps link, one-tap Pakistan helplines (15, 1122, 1099, 115), nearest police/hospital, screenshot blocking.
+- **Push:** every phone of a buddy is woken (`pushTokens/{name}/devices`), with retries.
 - **Backup:** client-side encrypted cloud backup (`backups/`).
 - **Security rules:** `firestore.rules`, `database.rules.json`, `storage.rules` (storage deny-all), tested in `backend-tests/`.
 
@@ -43,6 +45,12 @@ flutter build apk --debug
 ```
 
 Controller tests cover duplicate activation, cancellation and resolution. The widget test covers onboarding and settings navigation. These tests do not verify real alerts or device permissions.
+
+See `docs/ARCHITECTURE.md` and `docs/THREAT_MODEL.md`.
+
+## Release signing
+
+Create `android/key.properties` (git-ignored) with `storeFile`, `storePassword`, `keyAlias`, `keyPassword`; without it release builds use the debug key.
 
 ## Deploy backend
 
