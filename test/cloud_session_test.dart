@@ -47,6 +47,21 @@ class _Collection extends Fake
 // ignore: subtype_of_sealed_class
 class _Query extends Fake implements Query<Map<String, dynamic>> {
   @override
+  Query<Map<String, dynamic>> where(
+    Object field, {
+    Object? isEqualTo,
+    Object? isNotEqualTo,
+    Object? isLessThan,
+    Object? isLessThanOrEqualTo,
+    Object? isGreaterThan,
+    Object? isGreaterThanOrEqualTo,
+    Object? arrayContains,
+    Iterable<Object?>? arrayContainsAny,
+    Iterable<Object?>? whereIn,
+    Iterable<Object?>? whereNotIn,
+    bool? isNull,
+  }) => this;
+  @override
   Query<Map<String, dynamic>> orderBy(
     Object field, {
     bool descending = false,
