@@ -2,6 +2,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:safeher/emergency_controller.dart';
 
 void main() {
+  test('silent SOS goes live at once and clears its flag when ended', () {
+    final state = EmergencyController();
+    state.start(silent: true);
+    expect(state.status, EmergencyStatus.active);
+    expect(state.silent, isTrue);
+    state.cancel();
+    expect(state.status, EmergencyStatus.idle);
+    expect(state.silent, isFalse);
+    state.dispose();
+  });
   test('duplicate activation preserves a single countdown', () {
     final state = EmergencyController();
     state.start();

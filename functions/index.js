@@ -72,29 +72,46 @@ exports.pushSosAlert = onDocumentCreated(
     // A retried event older than 10 minutes is no longer useful as a wake-up.
     if (Date.now() - Date.parse(event.time) > 10 * 60 * 1000) return;
     const db = getFirestore();
-    const tokenDoc = await db.doc(`pushTokens/${alert.recipient}`).get();
-    const token = tokenDoc.exists ? tokenDoc.get('token') : null;
-    if (!token) return;
-    try {
-      await getMessaging().send({
-        token,
-        notification: {
-          title: `${alert.sender} needs help`,
-          body: 'Tap to see their live location.',
-        },
-        data: { type: 'sos', eventId: String(alert.eventId) },
-        android: { priority: 'high', ttl: 600000, notification: { channelId: 'sos_alerts' } },
-      });
-      // Recorded server side only, so the sender can see it was delivered to FCM.
-      await event.data.ref.update({ pushedAt: new Date().toISOString() });
-    } catch (e) {
-      // A dead token is removed so it is not tried again.
-      if (e.code === 'messaging/registration-token-not-registered') {
-        await tokenDoc.ref.delete();
-        return;
+    // Every phone of the recipient, plus the legacy single-token document.
+    const [legacy, devices] = await Promise.all([
+      db.doc(`pushTokens/${alert.recipient}`).get(),
+      db.collection(`pushTokens/${alert.recipient}/devices`).get(),
+    ]);
+    const targets = devices.docs.map((d) => ({ ref: d.ref, token: d.get('token') }));
+    if (legacy.exists && legacy.get('token')) {
+      targets.push({ ref: legacy.ref, token: legacy.get('token') });
+    }
+    if (!targets.length) return;
+    let delivered = 0;
+    let transient = null;
+    await Promise.all(targets.map(async ({ ref, token }) => {
+      try {
+        await getMessaging().send({
+          token,
+          notification: {
+            title: `${alert.sender} needs help`,
+            body: 'Tap to see their live location.',
+          },
+          data: { type: 'sos', eventId: String(alert.eventId) },
+          android: { priority: 'high', ttl: 600000, notification: { channelId: 'sos_alerts' } },
+        });
+        delivered++;
+      } catch (e) {
+        // A dead token is removed so it is not tried again.
+        if (e.code === 'messaging/registration-token-not-registered') {
+          await ref.delete();
+        } else if (TRANSIENT.has(e.code)) {
+          transient = e;
+        } else {
+          console.error('SOS push failed', alert.eventId, e.code || e);
+        }
       }
-      if (TRANSIENT.has(e.code)) throw e;
-      console.error('SOS push failed', alert.eventId, e.code || e);
+    }));
+    if (delivered) {
+      // Recorded server side only, so the sender can see it reached FCM.
+      await event.data.ref.update({ pushedAt: new Date().toISOString() });
+    } else if (transient) {
+      throw transient;
     }
   },
 );

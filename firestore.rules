@@ -230,6 +230,18 @@ service cloud.firestore {
 
     // Push token of the phone that should be woken for this account's alerts.
     // Only the owner writes it; only the server function reads it.
+    // One document per device of an account; only the server reads them.
+    match /pushTokens/{name}/devices/{device} {
+      allow create, update: if request.auth != null && name == me()
+        && device.matches('^[0-9a-f]{32}$')
+        && request.resource.data.keys().hasOnly(['token', 'platform', 'updatedAt'])
+        && request.resource.data.token is string
+        && request.resource.data.token.size() < 400;
+      allow delete: if request.auth != null && name == me();
+      allow get, list: if false;
+    }
+
+    // Legacy single-device token, still honoured by the push function.
     match /pushTokens/{name} {
       allow create, update: if request.auth != null && name == me()
         && request.resource.data.keys().hasOnly(['token', 'platform', 'updatedAt'])

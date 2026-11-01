@@ -286,6 +286,8 @@ class SocialController extends ChangeNotifier {
     // The baby pink light design is the default until the user picks otherwise.
     appearance = appearanceChosen ? (m['appearance'] ?? 'light') : 'light';
     countdown = m['countdown'] ?? 5;
+    silentSos = m['silentSos'] == true;
+    checkInDue = DateTime.tryParse(m['checkInDue'] as String? ?? '');
     shortcutKey = m['shortcutKey'] == 'volumeDown' ? 'volumeDown' : 'volumeUp';
     identityPriv = m['idPriv'] as String?;
     identityPub = m['idPub'] as String?;
@@ -387,6 +389,8 @@ class SocialController extends ChangeNotifier {
     _sequence = 0;
     signedIn = false;
     countdown = 5;
+    silentSos = false;
+    checkInDue = null;
     shortcutKey = 'volumeUp';
     _pinSalt = null;
     _pinHash = null;
@@ -495,6 +499,8 @@ class SocialController extends ChangeNotifier {
       'appearance': appearance,
       'appearanceChosen': appearanceChosen,
       'countdown': countdown,
+      'silentSos': silentSos,
+      'checkInDue': checkInDue?.toUtc().toIso8601String(),
       'shortcutKey': shortcutKey,
       'idPriv': identityPriv,
       'idPub': identityPub,
@@ -559,6 +565,24 @@ class SocialController extends ChangeNotifier {
   String appearance = 'light';
   bool appearanceChosen = false;
   int countdown = 5;
+
+  /// A shortcut-started SOS skips the countdown and shows nothing on screen,
+  /// for when an attacker is watching the phone.
+  bool silentSos = false;
+  void setSilentSos(bool value) {
+    silentSos = value;
+    notifyListeners();
+  }
+
+  /// A safe-walk check-in: if it is not confirmed by this time, SOS starts
+  /// (with the normal countdown, so a forgotten check-in can still be
+  /// cancelled). Saved, so it survives the app being closed.
+  DateTime? checkInDue;
+  void setCheckIn(Duration? within) {
+    checkInDue = within == null ? null : DateTime.now().add(within);
+    notifyListeners();
+  }
+
   String shortcutKey = 'volumeUp';
   void setShortcutKey(String value) {
     if (!['volumeUp', 'volumeDown'].contains(value)) return;

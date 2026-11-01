@@ -22,6 +22,7 @@ import 'ui/glass.dart';
 import 'ui/motion.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'helplines.dart';
+import 'check_in.dart';
 import 'ui/design.dart';
 import 'ui/sos_map_card.dart';
 import 'ui/sos_slider.dart';
@@ -315,6 +316,7 @@ class _SafeHerShellState extends State<SafeHerShell>
   String? _recoveryCode; // shown once, right after backup is turned on
   bool _needsRestore = false;
   Timer? _backupTimer;
+  Timer? _checkInTimer;
   ({String uid, String account, int revision})? _backupScheduled;
   CloudSocial? _cloud;
 
@@ -657,7 +659,7 @@ class _SafeHerShellState extends State<SafeHerShell>
       onSos: () {
         if (!mounted || !onboarded || !social.signedIn) return;
         if (emergency.status == EmergencyStatus.idle) {
-          _startSos();
+          _startSos(silent: social.silentSos);
         } else if (social.currentUserId == sosOwner) {
           // Same gesture during an active/counting SOS is the hidden cancel.
           // Nothing about this is shown on screen; the onboarding guide teaches
@@ -681,6 +683,10 @@ class _SafeHerShellState extends State<SafeHerShell>
       }
     }
     emergency.addListener(_syncEmergency);
+    _checkInTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _checkCheckIn(),
+    );
     if (const bool.fromEnvironment('SAFEHER_LOCAL')) {
       final screen = Uri.base.queryParameters['screen'];
       if (screen != null) {
@@ -909,7 +915,45 @@ class _SafeHerShellState extends State<SafeHerShell>
     return const SizedBox.shrink();
   }
 
-  void _startSos() {
+  /// SMS fallback: opens the messaging app with a help message and the last
+  /// known location, so it can go out over the mobile network alone.
+  Future<void> _smsLocation() async {
+    LocalSosEvent? event;
+    for (final e in social.visibleEvents) {
+      if (e.id == activeEventId) event = e;
+    }
+    final where = event?.lastLat == null
+        ? ''
+        : ' My location: https://maps.google.com/?q=${event!.lastLat},${event.lastLng}';
+    // Encoded by hand: queryParameters would turn spaces into '+', which
+    // some SMS apps show literally.
+    final body = Uri.encodeComponent(
+      'I need help. This is an SOS from SafeHer.$where',
+    );
+    final ok = await launchUrl(Uri.parse('sms:?body=$body'));
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the messaging app.')),
+      );
+    }
+  }
+
+  /// A missed safe-walk check-in raises an SOS on the user's behalf.
+  void _checkCheckIn() {
+    final due = social.checkInDue;
+    if (!mounted || due == null || DateTime.now().isBefore(due)) return;
+    if (!social.signedIn || emergency.status != EmergencyStatus.idle) return;
+    social.setCheckIn(null);
+    if (social.eligibleRecipients.isEmpty) return;
+    _startSos();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Check-in missed. SOS is starting; cancel if you are safe.'),
+      ),
+    );
+  }
+
+  void _startSos({bool silent = false}) {
     if (social.eligibleRecipients.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -922,7 +966,7 @@ class _SafeHerShellState extends State<SafeHerShell>
       return;
     }
     sosOwner = social.currentUserId;
-    emergency.start();
+    emergency.start(silent: silent);
   }
 
   void _syncEmergency() {
@@ -958,7 +1002,8 @@ class _SafeHerShellState extends State<SafeHerShell>
     listenable: Listenable.merge([emergency, social]),
     builder: (context, _) {
       if (emergency.status == EmergencyStatus.idle ||
-          social.currentUserId != sosOwner) {
+          social.currentUserId != sosOwner ||
+          emergency.silent) {
         return const SizedBox.shrink();
       }
       return Material(
@@ -1044,6 +1089,7 @@ class _SafeHerShellState extends State<SafeHerShell>
     _sounder.dispose();
     if (_ownsCalls) calls.dispose();
     _backupTimer?.cancel();
+    _checkInTimer?.cancel();
     _usernameChecker.dispose();
     WidgetsBinding.instance.removeObserver(this);
     shortcut.dispose();
@@ -1191,12 +1237,15 @@ class _SafeHerShellState extends State<SafeHerShell>
             ),
           ),
           SosSheet(
-            status: ownSos ? emergency.status : EmergencyStatus.idle,
+            status: ownSos && !emergency.silent
+                ? emergency.status
+                : EmergencyStatus.idle,
             remaining: emergency.remaining,
             total: emergency.countdownSeconds,
             recipients: social.eligibleRecipients.map((p) => p.name).toList(),
             onCancel: () => _finishSos(cancelled: true),
             onSafe: () => _finishSos(cancelled: false),
+            onSms: _smsLocation,
           ),
           // The app draws the call overlay above the Navigator; a shell on
           // its own (tests) still needs one here.
@@ -1496,6 +1545,8 @@ class _SafeHerShellState extends State<SafeHerShell>
             ),
           ),
         const SizedBox(height: 22),
+        CheckInCard(social: social),
+        const SizedBox(height: 12),
         const HelplineList(),
       ],
     );
@@ -1922,6 +1973,20 @@ class _SafeHerShellState extends State<SafeHerShell>
                   },
                 ),
                 const SizedBox(height: 14),
+                ListenableBuilder(
+                  listenable: social,
+                  builder: (context, _) => RowCard(
+                    leading: const IconChip(Icons.visibility_off_outlined),
+                    title: 'Silent SOS',
+                    detail:
+                        'The volume shortcut sends SOS at once, with no countdown or alarm on screen. Repeat the presses to stop it.',
+                    trailing: SoftSwitch(
+                      value: social.silentSos,
+                      label: 'Silent SOS',
+                      onChanged: social.setSilentSos,
+                    ),
+                  ),
+                ),
                 RowCard(
                   leading: const IconChip(Icons.tune_rounded),
                   title: 'Permissions',

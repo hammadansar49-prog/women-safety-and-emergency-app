@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:crypto/crypto.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
@@ -16,8 +18,13 @@ class PushService {
   String? _token;
   int _generation = 0;
 
-  DocumentReference<Map<String, dynamic>> _ref(String me) =>
-      _db.collection('pushTokens').doc(me);
+  /// One document per phone, so every device signed in to the account is
+  /// woken. The id is a hash of the token: stable, and reveals nothing.
+  DocumentReference<Map<String, dynamic>> _ref(String me, String token) => _db
+      .collection('pushTokens')
+      .doc(me)
+      .collection('devices')
+      .doc(sha256.convert(utf8.encode(token)).toString().substring(0, 32));
 
   Future<void> register(String me) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
@@ -43,8 +50,14 @@ class PushService {
 
   Future<void> _save(String token, String me, int generation) async {
     if (_me != me || _generation != generation) return;
+    final old = _token;
     _token = token;
-    await _ref(me).set({
+    if (old != null && old != token) {
+      try {
+        await _ref(me, old).delete();
+      } catch (_) {}
+    }
+    await _ref(me, token).set({
       'token': token,
       'platform': 'android',
       'updatedAt': FieldValue.serverTimestamp(),
@@ -63,7 +76,7 @@ class PushService {
     await refresh?.cancel();
     if (me != null && token != null && _me != me) {
       try {
-        await _ref(me).delete();
+        await _ref(me, token).delete();
       } catch (_) {}
     }
   }

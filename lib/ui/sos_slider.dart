@@ -202,6 +202,7 @@ class SosSheet extends StatefulWidget {
     required this.recipients,
     required this.onCancel,
     required this.onSafe,
+    this.onSms,
   });
 
   final EmergencyStatus status;
@@ -210,6 +211,9 @@ class SosSheet extends StatefulWidget {
   final List<String> recipients;
   final VoidCallback onCancel;
   final VoidCallback onSafe;
+
+  /// Opens the SMS app with the location, for when there is no internet.
+  final VoidCallback? onSms;
 
   @override
   State<SosSheet> createState() => _SosSheetState();
@@ -375,6 +379,7 @@ class _SosSheetState extends State<SosSheet> {
                                 key: const ValueKey('active'),
                                 recipients: widget.recipients,
                                 onSafe: widget.onSafe,
+                                onSms: widget.onSms,
                                 onHide: () => setState(() => _hidden = true),
                               ),
                       ),
@@ -496,9 +501,11 @@ class _Active extends StatelessWidget {
     required this.recipients,
     required this.onSafe,
     required this.onHide,
+    this.onSms,
   });
   final List<String> recipients;
   final VoidCallback onSafe;
+  final VoidCallback? onSms;
 
   /// Steps out of the way without stopping the SOS, so the rest of the app —
   /// messaging another buddy, for one — stays reachable.
@@ -573,6 +580,10 @@ class _Active extends StatelessWidget {
                 ),
             ],
           ),
+        ],
+        if (onSms != null) ...[
+          const SizedBox(height: 18),
+          OutlinedPill(label: 'No internet? Text my location', onTap: onSms),
         ],
         const SizedBox(height: 22),
         Pressable(
