@@ -108,9 +108,11 @@ class CloudSocial {
         // or the backend recovers. Without this the warning would stay up for
         // the rest of the session even though chat had started working again.
         unawaited(
-          _publishIdentity(me, uid, generation).then((_) {
-            if (_isCurrent(me, generation)) onError?.call(null);
-          }).catchError((Object _) {}),
+          _publishIdentity(me, uid, generation)
+              .then((_) {
+                if (_isCurrent(me, generation)) onError?.call(null);
+              })
+              .catchError((Object _) {}),
         );
       }
     }
@@ -127,6 +129,7 @@ class CloudSocial {
   bool _foreground = true;
   bool _typing = false;
   DateTime? _typingPublished;
+
   /// Friend username -> the uid whose presence is being watched.
   final _presenceSubs = <String, String>{};
 
@@ -760,6 +763,7 @@ class CloudSocial {
           'eventId': event,
           'status': 'active',
           'createdAt': FieldValue.serverTimestamp(),
+          ...?op.location,
         }),
     ]);
   }
@@ -773,20 +777,17 @@ class CloudSocial {
     final lng = double.parse(parts[1]);
     final last = _sosLastLoc[event];
     final now = DateTime.now();
-    if (last != null && !_ended.contains(event) && !sosFixIsWorthSending(last, now, lat, lng)) {
+    if (last != null &&
+        !_ended.contains(event) &&
+        !sosFixIsWorthSending(last, now, lat, lng)) {
       return;
     }
     _sosLastLoc[event] = (at: now, lat: lat, lng: lng);
     await Future.wait([
       for (final r in to)
-        _alert(event, r).update({
-          'lat': lat,
-          'lng': lng,
-          'locAt': parts[2],
-        }),
+        _alert(event, r).update({'lat': lat, 'lng': lng, 'locAt': parts[2]}),
     ]);
   }
-
 
   final _ended = <String>{};
 

@@ -1,6 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    match /aiCalls/{incident} {
+      allow read: if request.auth != null && resource.data.sender == me();
+      allow write: if false;
+    }
     // Username -> account lookup, used to sign in by username. A single
     // document can be read by name but the collection cannot be listed, and
     // documents can only ever be created: a taken name is never released.

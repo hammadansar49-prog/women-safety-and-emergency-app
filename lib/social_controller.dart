@@ -193,6 +193,7 @@ class CloudOp {
   const CloudOp(
     this.kind,
     this.peer, {
+    this.location,
     this.id,
     this.text,
     this.audio,
@@ -204,6 +205,7 @@ class CloudOp {
   /// approve (peer's ask to me), revoke (delete peer's ask to me), message,
   /// voice.
   final String kind;
+  final Map<String, dynamic>? location;
   final String peer;
   final String? id;
   final String? text;
@@ -1298,7 +1300,7 @@ class SocialController extends ChangeNotifier {
     );
   }
 
-  LocalSosEvent createSos() {
+  LocalSosEvent createSos({Map<String, dynamic>? initialLocation}) {
     for (final event in _events) {
       if (event.senderId == currentUserId &&
           event.status == LocalSosStatus.active) {
@@ -1319,7 +1321,15 @@ class SocialController extends ChangeNotifier {
       createdAt: DateTime.now(),
     );
     _events.add(event);
-    _emit(CloudOp('sosStart', '', id: event.id, text: recipients.join(',')));
+    _emit(
+      CloudOp(
+        'sosStart',
+        '',
+        id: event.id,
+        text: recipients.join(','),
+        location: initialLocation,
+      ),
+    );
     notifyListeners();
     return event;
   }

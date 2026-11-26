@@ -11,6 +11,36 @@ class LocationFix {
   final DateTime time;
 }
 
+bool usableSosFix(LocationFix fix, DateTime now) {
+  final age = now.difference(fix.time);
+  return fix.latitude.isFinite &&
+      fix.longitude.isFinite &&
+      fix.latitude.abs() <= 90 &&
+      fix.longitude.abs() <= 180 &&
+      age >= Duration.zero &&
+      age <= const Duration(minutes: 2);
+}
+
+Future<LocationFix?> cachedSosFix() async {
+  try {
+    final permission = await Geolocator.checkPermission();
+    if (permission != LocationPermission.always &&
+        permission != LocationPermission.whileInUse) {
+      return null;
+    }
+    final position = await Geolocator.getLastKnownPosition();
+    if (position == null) return null;
+    final fix = LocationFix(
+      position.latitude,
+      position.longitude,
+      position.timestamp,
+    );
+    return usableSosFix(fix, DateTime.now()) ? fix : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Streams the device position for as long as an SOS is active.
 ///
 /// This is continuous tracking, not a one-off snapshot: [start] subscribes to
@@ -19,12 +49,14 @@ class LocationFix {
 /// keeps going when the screen is locked or the app is in the background.
 class LocationTracker {
   StreamSubscription<Position>? _sub;
+  int _generation = 0;
   bool get running => _sub != null;
 
   /// Starts tracking. Returns false when location is switched off or the user
   /// declined permission; in that case nothing is tracked and nothing is shared.
   Future<bool> start(void Function(LocationFix fix) onFix) async {
     if (_sub != null) return true;
+    final generation = ++_generation;
     try {
       if (!await Geolocator.isLocationServiceEnabled()) return false;
       var permission = await Geolocator.checkPermission();
@@ -37,9 +69,15 @@ class LocationTracker {
       }
       // An immediate first fix so the contact is not waiting for movement.
       try {
-        final first = await Geolocator.getCurrentPosition();
-        onFix(_fix(first));
+        final first = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            timeLimit: Duration(seconds: 3),
+            accuracy: LocationAccuracy.high,
+          ),
+        );
+        if (generation == _generation) onFix(_fix(first));
       } catch (_) {}
+      if (generation != _generation) return false;
       _sub = Geolocator.getPositionStream(
         locationSettings: _settings(),
       ).listen((p) => onFix(_fix(p)), onError: (_) {});
@@ -86,6 +124,7 @@ class LocationTracker {
   /// Stops tracking and returns the last known position, so the point where
   /// the SOS ended can be recorded.
   Future<LocationFix?> stop() async {
+    _generation++;
     final sub = _sub;
     _sub = null;
     await sub?.cancel();

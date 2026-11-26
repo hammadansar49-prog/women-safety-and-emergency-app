@@ -4,6 +4,7 @@ const { initializeApp } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 
 initializeApp();
+Object.assign(exports, require('./ai-calling'));
 
 // --- Username Bloom filter --------------------------------------------------
 // Same hashing as lib/bloom_filter.dart: FNV-1a (32 bit) over UTF-8 with two

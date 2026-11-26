@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'emergency_controller.dart';
+import 'emergency_dialer.dart';
+import 'ai_call_status.dart';
 import 'firebase_options.dart';
 import 'social_controller.dart';
 import 'contacts_screen.dart';
@@ -298,6 +300,9 @@ class _SafeHerShellState extends State<SafeHerShell>
   final tracker = LocationTracker();
   String? sosOwner;
   String? activeEventId;
+  bool _sosMediaRequested = false;
+  LocationFix? _preparedSosFix;
+  int _locationPreparation = 0;
 
   /// Which auth surface is showing while the user is not yet signed in.
   _AuthStage _stage = _AuthStage.login;
@@ -910,6 +915,7 @@ class _SafeHerShellState extends State<SafeHerShell>
   }
 
   void _startSos() {
+    if (emergency.status != EmergencyStatus.idle) return;
     if (social.eligibleRecipients.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -923,6 +929,33 @@ class _SafeHerShellState extends State<SafeHerShell>
     }
     sosOwner = social.currentUserId;
     emergency.start();
+    _preparedSosFix = null;
+    final generation = ++_locationPreparation;
+    void remember(LocationFix? fix) {
+      if (!mounted ||
+          generation != _locationPreparation ||
+          emergency.status == EmergencyStatus.idle ||
+          fix == null ||
+          !usableSosFix(fix, DateTime.now())) {
+        return;
+      }
+      if (_preparedSosFix != null && !fix.time.isAfter(_preparedSosFix!.time)) {
+        return;
+      }
+      _preparedSosFix = fix;
+      final eventId = activeEventId;
+      if (eventId != null) {
+        social.updateSosLocation(
+          eventId,
+          fix.latitude,
+          fix.longitude,
+          fix.time,
+        );
+      }
+    }
+
+    cachedSosFix().then(remember);
+    LocationTracker.currentFix().then(remember);
   }
 
   void _syncEmergency() {
@@ -931,16 +964,19 @@ class _SafeHerShellState extends State<SafeHerShell>
         if (social.currentUserId != sosOwner) {
           throw StateError('Account changed during countdown.');
         }
-        activeEventId = social.createSos().id;
+        final fix = _preparedSosFix;
+        activeEventId = social
+            .createSos(
+              initialLocation: fix != null && usableSosFix(fix, DateTime.now())
+                  ? {
+                      'lat': fix.latitude,
+                      'lng': fix.longitude,
+                      'locAt': fix.time.toIso8601String(),
+                    }
+                  : null,
+            )
+            .id;
         _startTracking(activeEventId!);
-        // Camera and microphone go to the approved buddies, alongside the
-        // location stream.
-        if (social.cloudConnected) {
-          calls.startSos(
-            activeEventId!,
-            social.eligibleRecipients.map((p) => p.id).toList(),
-          );
-        }
       } on StateError {
         emergency.cancel();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -985,11 +1021,70 @@ class _SafeHerShellState extends State<SafeHerShell>
     },
   );
 
+  Future<void> _toggleSosMedia() async {
+    if (_sosMediaRequested) {
+      setState(() => _sosMediaRequested = false);
+      await calls.stopSos();
+      return;
+    }
+    final eventId = activeEventId;
+    if (eventId == null || !social.cloudConnected) return;
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Share camera and microphone?'),
+        content: const Text(
+          'Approved SOS buddies may see and hear your surroundings. '
+          'This is not audio sharing with police. Device permissions are required. '
+          'You can stop sharing without ending SOS.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Allow sharing'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted ||
+        approved != true ||
+        activeEventId != eventId ||
+        emergency.status != EmergencyStatus.active ||
+        !social.cloudConnected) {
+      return;
+    }
+    setState(() => _sosMediaRequested = true);
+    try {
+      await calls.startSos(
+        eventId,
+        social.eligibleRecipients.map((person) => person.id).toList(),
+      );
+    } catch (_) {
+      if (!mounted || activeEventId != eventId) return;
+      setState(() => _sosMediaRequested = false);
+      await calls.stopSos();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Media sharing could not start. SOS remains active.'),
+          ),
+        );
+      }
+    }
+  }
+
   /// Streams the position into the active SOS until it is stopped.
   void _startTracking(String eventId) {
     tracker
         .start((fix) {
-          if (!mounted) return;
+          if (!mounted ||
+              activeEventId != eventId ||
+              emergency.status != EmergencyStatus.active)
+            return;
           social.updateSosLocation(
             eventId,
             fix.latitude,
@@ -1012,6 +1107,8 @@ class _SafeHerShellState extends State<SafeHerShell>
 
   void _finishSos({required bool cancelled}) {
     if (social.currentUserId != sosOwner) return;
+    _locationPreparation++;
+    _preparedSosFix = null;
     final eventId = activeEventId;
     if (eventId != null) {
       // Tracking ends with the SOS; the last fix becomes the "ended here" point.
@@ -1034,6 +1131,7 @@ class _SafeHerShellState extends State<SafeHerShell>
       emergency.resolve();
     }
     activeEventId = null;
+    _sosMediaRequested = false;
     sosOwner = null;
   }
 
@@ -1421,6 +1519,29 @@ class _SafeHerShellState extends State<SafeHerShell>
           onComplete: _startSos,
         ),
         const SizedBox(height: 26),
+        const EmergencyDialer(),
+        if (activeEventId != null && social.cloudConnected)
+          AiCallStatus(sender: social.currentUserId, eventId: activeEventId!),
+        if (emergency.status == EmergencyStatus.active) ...[
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: social.cloudConnected || _sosMediaRequested
+                ? _toggleSosMedia
+                : null,
+            icon: const Icon(Icons.mic),
+            label: Text(
+              _sosMediaRequested
+                  ? 'Stop camera / microphone sharing'
+                  : 'Share camera / microphone with buddies',
+            ),
+          ),
+          Text(
+            _sosMediaRequested
+                ? 'Media sharing requested. Recipient connection is not confirmed.'
+                : 'Media stays off until you allow sharing. A cloud connection is required.',
+          ),
+        ],
+        const SizedBox(height: 18),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -1469,7 +1590,7 @@ class _SafeHerShellState extends State<SafeHerShell>
             Expanded(
               child: _statusCard(
                 'Location',
-                'Ready',
+                'Checked on SOS',
                 AppColors.light ? const Color(0xFFE4F2E9) : AppColors.tint,
                 dot: AppColors.success,
                 titleColor: AppColors.light ? const Color(0xFF3F6B52) : null,
